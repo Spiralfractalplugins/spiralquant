@@ -3,25 +3,25 @@
 void QuantumEngine::prepare (double sampleRateHz)
 {
     sampleRate = sampleRateHz <= 0.0 ? 48000.0 : sampleRateHz;
+    fx.prepare (sampleRate);
     for (int i = 0; i < MAX_VOICES; ++i)
     {
         voices[i].prepare (sampleRate);
         voiceNote[i] = -1;
         voiceAge[i] = 0;
     }
-    reset();
-    for (int i = 0; i < QuantumOsc::SIZE; ++i) scopeWave[i] = 0.0f;
+    reset();    for (int i = 0; i < QuantumOsc::SIZE; ++i) scopeWave[i] = 0.0f;
 }
 
 void QuantumEngine::reset()
 {
+    fx.reset();
     for (int i = 0; i < MAX_VOICES; ++i)
     {
         voices[i].noteOff();
         voiceNote[i] = -1;
     }
 }
-
 void QuantumEngine::setParams (float attack, float decay, float sustain, float release,
                     float filterFreq, float filterRes, float drive, float satMix, float gain,
                     int waveType, float waveShift, float waveScale, float waveImpulse,
@@ -33,6 +33,11 @@ void QuantumEngine::setParams (float attack, float decay, float sustain, float r
                              waveType, waveShift, waveScale, waveImpulse,
                              potentialType, potentialShift, potentialScale, potentialHeight,
                              showFFT, sampleMode, timestepDelta, samplesPerTimestep, applyWavefunction);
+}
+
+void QuantumEngine::setFxParams (int type, float depth, float rate, float feedback, float mix, float bits, float entropy, int soloMode)
+{
+    fx.setParams (type, depth, rate, feedback, mix, bits, entropy, soloMode);
 }
 
 void QuantumEngine::handleNoteOn (int note, int velocity)
@@ -91,6 +96,12 @@ void QuantumEngine::process (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&
         for (int c = 1; c < numChannels; ++c)
             juce::FloatVectorOperations::copy (buffer.getWritePointer (c), buffer.getWritePointer (0), numSamples);
     }
+
+    if (running)
+        fx.process (buffer);
+
+    if (! running)
+        for (int i = 0; i < QuantumOsc::SIZE; ++i) scopeWave[i] = 0.0f;
 
     // scope from first active voice
     int sV = -1;

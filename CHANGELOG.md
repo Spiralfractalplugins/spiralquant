@@ -3,6 +3,13 @@
 All notable changes to SpiralQuant are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Added
+- Master FX module: Off / Flanger / Phaser / Bitcrush / Fractal Entropy.
+- HUD UI redesign with panel layout, oscilloscope grid, knobs and value labels.
+- Screenshot preview in README.
+
 ## [0.1.0] - 2026-10-14
 
 ### Added

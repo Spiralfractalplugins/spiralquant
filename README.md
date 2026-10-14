@@ -5,12 +5,15 @@ Instead of a classic wavetable, each voice's oscillator is a complex-valued
 solution of the 1D time-dependent Schrödinger equation, evolved in real time with
 a split-step Fourier method on a 128-point grid.
 
+## UI
+
+![SpiralQuant HUD interface](docs/screenshots/ui-hud.png)
+
 ## Formats
 
 - VST3
 - AU (macOS)
 - Standalone application
-
 ## Sound engine
 
 - **8-voice polyphony** with oldest-voice stealing.
@@ -53,7 +56,13 @@ a split-step Fourier method on a 128-point grid.
 | `drive`              | float    | 0.0 – 1.0                                     | 0.0     |
 | `satMix`             | float    | 0.0 – 1.0                                     | 0.0     |
 | `gain`               | float    | 0.0 – 2.0                                     | 0.8     |
-
+| `fxType`             | choice   | Off / Flanger / Phaser / Bitcrush / Fractal  | 0 (Off) |
+| `fxDepth`            | float    | 0.0 – 1.0                                     | 0.5     |
+| `fxRate`             | float    | 0.01 – 20 Hz                                  | 1.0     |
+| `fxFeedback`         | float    | 0.0 – 0.95                                    | 0.3     |
+| `fxMix`              | float    | 0.0 – 1.0                                     | 0.5     |
+| `fxBits`             | float    | 2 – 16                                        | 8       |
+| `fxEntropy`          | float    | 0.0 – 1.0                                     | 0.5     |
 Parameters are stored in an `AudioProcessorValueTreeState`, so host automation and
 state save/restore are supported.
 

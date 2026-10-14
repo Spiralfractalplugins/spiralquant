@@ -45,6 +45,16 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     params.push_back (flt ("satMix", "Sat Mix", 0.0f, 1.0f, 0.0f));
     params.push_back (flt ("gain", "Gain", 0.0f, 2.0f, 0.8f));
 
+    // Master FX (appended last: host index stability)
+    params.push_back (choice ("fxType", "FX Type", { "Off","Flanger","Phaser","Bitcrush","Fractal" }, 0));
+    params.push_back (flt ("fxDepth", "FX Depth", 0.0f, 1.0f, 0.5f));
+    params.push_back (flt ("fxRate", "FX Rate", 0.01f, 20.0f, 1.0f));
+    params.push_back (flt ("fxFeedback", "FX Feedback", 0.0f, 0.95f, 0.3f));
+    params.push_back (flt ("fxMix", "FX Mix", 0.0f, 1.0f, 0.5f));
+    params.push_back (flt ("fxBits", "FX Bits", 2.0f, 16.0f, 8.0f));
+    params.push_back (flt ("fxEntropy", "FX Entropy", 0.0f, 1.0f, 0.5f));
+    params.push_back (choice ("fxSolo", "FX Solo", { "Full","Dry","Wet" }, 0));
+
     return { params.begin(), params.end() };
 }
 
@@ -97,8 +107,18 @@ void PluginProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
         apvts.getRawParameterValue ("applyWavefunction")->load()
     );
 
-    bool running = true;
+    engine.setFxParams (
+        static_cast<int> (*apvts.getRawParameterValue ("fxType")),
+        *apvts.getRawParameterValue ("fxDepth"),
+        *apvts.getRawParameterValue ("fxRate"),
+        *apvts.getRawParameterValue ("fxFeedback"),
+        *apvts.getRawParameterValue ("fxMix"),
+        *apvts.getRawParameterValue ("fxBits"),
+        *apvts.getRawParameterValue ("fxEntropy"),
+        static_cast<int> (*apvts.getRawParameterValue ("fxSolo"))
+    );
 
+    bool running = true;
     engine.process (buffer, midi, running);
 }
 

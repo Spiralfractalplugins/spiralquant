@@ -42,6 +42,7 @@ target_sources(SpiralQuant PRIVATE
     Source/dsp/QuantumOsc.cpp
     Source/dsp/QuantumVoice.cpp
     Source/dsp/QuantumEngine.cpp
+    Source/dsp/MasterFx.cpp
 )
 
 target_link_libraries(SpiralQuant PRIVATE
@@ -71,6 +72,7 @@ target_sources(SpiralQuantTests PRIVATE
     Source/dsp/QuantumOsc.cpp
     Source/dsp/QuantumVoice.cpp
     Source/dsp/QuantumEngine.cpp
+    Source/dsp/MasterFx.cpp
 )
 target_include_directories(SpiralQuantTests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/Source)
 target_link_libraries(SpiralQuantTests PRIVATE

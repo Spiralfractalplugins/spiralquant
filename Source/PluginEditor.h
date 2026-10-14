@@ -79,21 +79,32 @@ private:
     juce::ComboBox waveType, potentialType, sampleMode;
     juce::ToggleButton showFFT, applyQm;
 
+    juce::ComboBox fxType, fxSolo;
+
     ValueSlider waveShift, waveScale, waveImpulse;
     ValueSlider potentialShift, potentialScale, potentialHeight;
     ValueSlider timestepDelta, samplesPerTimestep;
     ValueSlider attack, decay, sustain, release;
     ValueSlider filterFreq, filterRes, drive, satMix, gain;
+    ValueSlider fxDepth, fxRate, fxFeedback, fxMix, fxBits, fxEntropy;
 
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> waveTypeAtt, potentialTypeAtt, sampleModeAtt;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> waveTypeAtt, potentialTypeAtt, sampleModeAtt, fxTypeAtt, fxSoloAtt;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> showFFTAtt, applyQmAtt;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> waveShiftAtt, waveScaleAtt, waveImpulseAtt;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> potentialShiftAtt, potentialScaleAtt, potentialHeightAtt;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> timestepAtt, evolRateAtt;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attackAtt, decayAtt, sustainAtt, releaseAtt;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> filterFreqAtt, filterResAtt, driveAtt, satMixAtt, gainAtt;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> fxDepthAtt, fxRateAtt, fxFeedbackAtt, fxMixAtt, fxBitsAtt, fxEntropyAtt;
 
-    juce::Rectangle<int> waveArea, potArea, evolArea, voiceArea;
+    juce::Rectangle<int> waveArea, potArea, evolArea, voiceArea, fxArea;
+
+    juce::Label waveShiftLabel, waveScaleLabel, waveImpulseLabel;
+    juce::Label potentialShiftLabel, potentialScaleLabel, potentialHeightLabel;
+    juce::Label timestepLabel, evolRateLabel;
+    juce::Label attackLabel, decayLabel, sustainLabel, releaseLabel;
+    juce::Label filterFreqLabel, filterResLabel, driveLabel, satMixLabel, gainLabel;
+    juce::Label fxDepthLabel, fxRateLabel, fxFeedbackLabel, fxMixLabel, fxBitsLabel, fxEntropyLabel;
 
     void paintPanel (juce::Graphics& g, juce::Rectangle<int> r, const juce::String& name);
 

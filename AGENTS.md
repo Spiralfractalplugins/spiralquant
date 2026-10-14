@@ -51,6 +51,8 @@ Expected test output ends with `ALL TESTS PASSED`.
   and gain. Parameters are pushed globally before `processBlock`.
 - `QuantumOsc` is a 128-point complex DSP updated by split-step Fourier;
   `getNextSample(phaseInc)` advances the wave if `samplesPerTimestep >= 1`.
+- Master effects live in `MasterFx` (JUCE Chorus/Phaser + custom Bitcrush/Fractal)
+  and run after voice mixing in `QuantumEngine::process`.
 - Scope data is copied from the first active voice under the engine's (caller's)
   guard; the UI polls `processor.getScopeWave()` on a 30 Hz timer.
 
