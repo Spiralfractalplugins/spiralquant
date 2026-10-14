@@ -55,6 +55,13 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     params.push_back (flt ("fxEntropy", "FX Entropy", 0.0f, 1.0f, 0.5f));
     params.push_back (choice ("fxSolo", "FX Solo", { "Full","Dry","Wet" }, 0));
 
+    // Harmony / pitch / tunneling (appended last: host index stability)
+    params.push_back (bl ("chordMode", "Chord Mode", false));
+    params.push_back (choice ("chordType", "Chord Type",
+        { "Power","Major","Minor","Sus4","Major7","Tritone","Cluster","Pythagorean" }, 1));
+    params.push_back (flt ("pitchShift", "Pitch Shift", -2400.0f, 2400.0f, 0.0f));
+    params.push_back (bl ("tunnel", "Tunneling", false));
+
     return { params.begin(), params.end() };
 }
 
@@ -104,7 +111,11 @@ void PluginProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
         sm->getIndex(),
         *apvts.getRawParameterValue ("timestepDelta"),
         *apvts.getRawParameterValue ("samplesPerTimestep"),
-        apvts.getRawParameterValue ("applyWavefunction")->load()
+        apvts.getRawParameterValue ("applyWavefunction")->load(),
+        apvts.getRawParameterValue ("chordMode")->load(),
+        static_cast<int> (*apvts.getRawParameterValue ("chordType")),
+        *apvts.getRawParameterValue ("pitchShift"),
+        apvts.getRawParameterValue ("tunnel")->load()
     );
 
     engine.setFxParams (

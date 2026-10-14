@@ -1,10 +1,47 @@
 #include <JuceHeader.h>
 #include <cmath>
 #include "PluginProcessor.h"
+#include "gui/LogoMark.h"
 
-int main()
+static void renderLogoImage (const juce::File& file, int size, bool withBackground)
+{
+    juce::Image img (juce::Image::ARGB, size, size, true);
+    {
+        juce::Graphics g (img);
+        g.setColour (juce::Colours::transparentBlack);
+        g.fillAll();
+        SpiralQuantLogo::draw (g, juce::Rectangle<float> ((float) size, (float) size), withBackground);
+    }
+    if (auto stream = file.createOutputStream())
+    {
+        juce::PNGImageFormat png;
+        png.writeImageToStream (img, *stream);
+    }
+}
+
+static int runRenderLogo (const juce::String& outputDir)
+{
+    const juce::File dir (outputDir);
+    dir.createDirectory();
+    renderLogoImage (dir.getChildFile ("logo.png"), 1024, false);
+
+    const int sizes[] = { 16, 32, 64, 128, 256, 512, 1024 };
+    for (int s : sizes)
+    {
+        auto png = dir.getChildFile ("icon_" + juce::String (s) + ".png");
+        renderLogoImage (png, s, true);
+        renderLogoImage (dir.getChildFile ("icon_" + juce::String (s) + "@2x.png"), s * 2, true);
+    }
+    std::cout << "rendered logo + icons to " << dir.getFullPathName() << "\n";
+    return 0;
+}
+
+int main (int argc = 1, char** argv = nullptr)
 {
     juce::ScopedJuceInitialiser_GUI gui;
+
+    if (argc > 2 && juce::String (argv[1]) == "--render-logo")
+        return runRenderLogo (argv[2]);
 
     for (int wt = 0; wt < 6; ++wt)
     for (int pt = 0; pt < 6; ++pt)
@@ -79,6 +116,73 @@ int main()
         }
         rms = std::sqrt (rms / 512.0f);
         if (rms <= 0.0f) { std::cerr << "FX silent fxt=" << fxt << "\n"; return 1; }
+    }
+
+    // chord / pitch / tunnel matrix
+    for (int chord = 0; chord < 2; ++chord)
+    for (int ct = 0; ct < 8; ++ct)
+    for (int tunnel = 0; tunnel < 2; ++tunnel)
+    {
+        PluginProcessor proc;
+        proc.prepareToPlay (48000.0, 512);
+        proc.apvts.getParameter ("samplesPerTimestep")->setValueNotifyingHost (0.2f);
+        proc.apvts.getParameter ("chordMode")->setValueNotifyingHost ((float) chord);
+        proc.apvts.getParameter ("chordType")->setValueNotifyingHost ((float) ct / 7.0f);
+        proc.apvts.getParameter ("tunnel")->setValueNotifyingHost ((float) tunnel);
+        proc.apvts.getParameter ("pitchShift")->setValueNotifyingHost (chord == 0 ? -1.0f : 1.0f);
+
+        juce::MidiBuffer midi, idle;
+        midi.addEvent (juce::MidiMessage::noteOn (1, 60, (juce::uint8) 100), 0);
+        juce::AudioBuffer<float> buffer (2, 512);
+        buffer.clear();
+        for (int b = 0; b < 8; ++b)
+            proc.processBlock (buffer, idle);
+        proc.processBlock (buffer, midi);
+        for (int b = 0; b < 8; ++b)
+            proc.processBlock (buffer, idle);
+
+        float rms = 0.0f;
+        const float* d = buffer.getReadPointer (0);
+        for (int i = 0; i < 512; ++i)
+        {
+            if (! std::isfinite (d[i])) { std::cerr << "NaN chord=" << chord << " ct=" << ct << " tunnel=" << tunnel << "\n"; return 1; }
+            rms += d[i] * d[i];
+        }
+        rms = std::sqrt (rms / 512.0f);
+        if (rms <= 0.0f) { std::cerr << "silent chord=" << chord << " ct=" << ct << " tunnel=" << tunnel << "\n"; return 1; }
+    }
+
+    if (argc > 1 && juce::String (argv[1]) == "--bench")
+    {
+        // Deterministic CPU benchmark: 8 voices, evolution on, no FX.
+        PluginProcessor proc;
+        proc.prepareToPlay (48000.0, 512);
+        proc.apvts.getParameter ("samplesPerTimestep")->setValueNotifyingHost (0.2f);
+        proc.apvts.getParameter ("applyWavefunction")->setValueNotifyingHost (1.0f);
+
+        {
+            juce::MidiBuffer midi;
+            for (int n : { 48, 55, 60, 62, 64, 67, 69, 72 })
+                midi.addEvent (juce::MidiMessage::noteOn (1, (juce::uint8) n, (juce::uint8) 100), 0);
+            juce::AudioBuffer<float> buffer (2, 512);
+            proc.processBlock (buffer, midi);
+        }
+
+        const int blocks = 20000;
+        juce::AudioBuffer<float> buffer (2, 512);
+        juce::MidiBuffer empty;
+        const double t0 = juce::Time::getMillisecondCounterHiRes();
+        for (int i = 0; i < blocks; ++i)
+            proc.processBlock (buffer, empty);
+        const double us = (juce::Time::getMillisecondCounterHiRes() - t0) * 1000.0 / (double) blocks;
+        const float rt = (float) (us * 48000.0 / 512.0 / 1.0e6);
+        std::cout << "bench: " << juce::String (us, 1) << " us/block  ("
+                  << juce::String (rt, 3) << " x realtime, 8 voices)\n";
+
+        float rms = 0.0f;
+        const float* d = buffer.getReadPointer (0);
+        for (int i = 0; i < 512; ++i) { if (! std::isfinite (d[i])) { std::cerr << "bench NaN\n"; return 1; } rms += d[i] * d[i]; }
+        if (rms <= 0.0f) { std::cerr << "bench silent\n"; return 1; }
     }
 
     std::cout << "ALL TESTS PASSED" << std::endl;

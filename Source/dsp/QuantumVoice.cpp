@@ -8,12 +8,14 @@ void QuantumVoice::prepare (double sampleRateHz)
     sampleRate = sampleRateHz <= 0.0 ? 48000.0 : sampleRateHz;
     osc.prepare (sampleRate);
     filter.reset();
+    coeffsDirty = true;
 }
 
-void QuantumVoice::noteOn (int note, int velocity)
+void QuantumVoice::noteOn (int note, int velocity, float ratio)
 {
     midiNote = note;
-    targetFreq = 440.0f * std::pow (2.0f, (note - 69) / 12.0f);
+    noteRatio = ratio;
+    targetFreq = applyPitch (440.0f * std::pow (2.0f, (note - 69) / 12.0f) * ratio);
     if (playingFreq <= 0.0f) playingFreq = targetFreq;
     phaseInc = frequencyToPhaseInc (playingFreq);
 
@@ -36,7 +38,8 @@ void QuantumVoice::setParams (float a, float d, float s, float r,
                               float ff, float fr, float dr, float sm, float g,
                               int wt, float ws, float wsc, float wi,
                               int pt, float ps, float psc, float ph,
-                              int sf, int smode, float td, float spt, bool apply)
+                              int sf, int smode, float td, float spt, bool apply,
+                              float cents, bool tunnel)
 {
     attackMs = juce::jlimit (1.0f, 5000.0f, a);
     decayMs = juce::jlimit (1.0f, 5000.0f, d);
@@ -47,12 +50,43 @@ void QuantumVoice::setParams (float a, float d, float s, float r,
     drive = juce::jlimit (0.0f, 1.0f, dr);
     satMix = juce::jlimit (0.0f, 1.0f, sm);
     gain = juce::jlimit (0.0f, 2.0f, g);
+    coeffsDirty = true;
+
+    const float clampedCents = juce::jlimit (-2400.0f, 2400.0f, cents);
+    if (clampedCents != pitchCents)
+    {
+        pitchCents = clampedCents;
+        if (midiNote >= 0)
+            targetFreq = applyPitch (440.0f * std::pow (2.0f, (midiNote - 69) / 12.0f) * noteRatio);
+    }
 
     osc.setWaveParameters (wt, ws, wsc, wi);
     osc.setPotential (pt, ps, psc, ph);
+    osc.setTunneling (tunnel);
     osc.setEvolution (sf, smode, td, spt);
+    if (td != lastTimestepDelta)
+    {
+        lastTimestepDelta = td;
+        osc.markTablesDirty();
+    }
     // apply toggle not stored; keep always true for now
     (void) apply;
+}
+
+void QuantumVoice::prepareBlock()
+{
+    if (coeffsDirty)
+    {
+        coeffsDirty = false;
+        const float q = 0.5f + filterRes * filterRes * 12.0f;
+        filter.setCoefficients (juce::IIRCoefficients::makeLowPass ((double) sampleRate,
+                                                                    (double) filterFreq, (double) q));
+    }
+
+    const float srHz = (float) sampleRate;
+    attackInc = 1.0f / std::max (1.0f, attackMs * 0.001f * srHz);
+    decayRate = 1.0f / std::max (1.0f, decayMs * 0.001f * srHz);
+    releaseMul = 1.0f / std::max (1.0f, releaseMs * 0.001f * srHz);
 }
 
 float QuantumVoice::process (const float* /*params*/)
@@ -74,18 +108,13 @@ float QuantumVoice::process (const float* /*params*/)
 
     float sample = out * envelope * velocityGain;
 
-    // lowpass
-    const float q = 0.5f + filterRes * filterRes * 12.0f;
-    const float w = 2.0f * juce::MathConstants<float>::pi * filterFreq / (float) sampleRate;
-    juce::IIRCoefficients c = juce::IIRCoefficients::makeLowPass ((double) sampleRate, (double) filterFreq, (double) q);
-    filter.setCoefficients (c);
     sample = filter.processSingleSampleRaw (sample);
 
-    // saturation
+    // saturation: cubic soft-clip approximation of tanh, near-identical for |x| < 1.5
     if (drive > 0.0f)
     {
-        const float x = sample * (1.0f + drive * 12.0f);
-        const float sat = std::tanh (x);
+        const float x = juce::jlimit (-1.5f, 1.5f, sample * (1.0f + drive * 12.0f));
+        const float sat = x * (1.0f - (x * x) * (1.0f / 3.0f));
         sample = sample * (1.0f - satMix) + sat * satMix;
     }
 
@@ -100,15 +129,12 @@ void QuantumVoice::updateEnvelope()
 {
     if (state == State::Attack)
     {
-        const float inc = 1.0f / std::max (1.0f, attackMs * 0.001f * (float) sampleRate);
-        envelope += inc;
+        envelope += attackInc;
         if (envelope >= 1.0f) { envelope = 1.0f; state = State::Decay; }
     }
     else if (state == State::Decay)
     {
-        const float diff = envelope - sustainLevel;
-        const float rate = 1.0f / std::max (1.0f, decayMs * 0.001f * (float) sampleRate);
-        envelope -= diff * rate;
+        envelope -= (envelope - sustainLevel) * decayRate;
         if (std::fabs (envelope - sustainLevel) < 0.001f) { envelope = sustainLevel; state = State::Sustain; }
     }
     else if (state == State::Sustain)
@@ -117,8 +143,7 @@ void QuantumVoice::updateEnvelope()
     }
     else if (state == State::Release)
     {
-        const float rate = 1.0f / std::max (1.0f, releaseMs * 0.001f * (float) sampleRate);
-        envelope *= (1.0f - rate);
+        envelope *= (1.0f - releaseMul);
         if (envelope < 0.0001f) { envelope = 0.0f; state = State::Idle; }
     }
 }

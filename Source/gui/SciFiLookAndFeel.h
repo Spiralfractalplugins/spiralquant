@@ -39,6 +39,41 @@ public:
         setColour (juce::PopupMenu::textColourId, SciFiTheme::text);
         setColour (juce::PopupMenu::highlightedBackgroundColourId, SciFiTheme::neon.withAlpha (0.25f));
         setColour (juce::PopupMenu::highlightedTextColourId, SciFiTheme::text);
+        setColour (juce::Slider::textBoxTextColourId, SciFiTheme::text);
+        setColour (juce::Slider::textBoxBackgroundColourId, SciFiTheme::panelDeep);
+        setColour (juce::Slider::textBoxOutlineColourId, SciFiTheme::strokeDim);
+        setColour (juce::TextButton::buttonOnColourId, SciFiTheme::neon.withAlpha (0.16f));
+    }
+
+    std::unique_ptr<juce::FocusOutline> createFocusOutlineForComponent (juce::Component&) override
+    {
+        struct Props : juce::FocusOutline::OutlineWindowProperties
+        {
+            juce::Rectangle<int> getOutlineBounds (juce::Component& focused) override
+            {
+                return focused.getScreenBounds().expanded (3);
+            }
+            void drawOutline (juce::Graphics& g, int w, int h) override
+            {
+                g.setColour (SciFiTheme::neon.withAlpha (0.9f));
+                g.drawRoundedRectangle (3.5f, 3.5f, (float) w - 7.0f, (float) h - 7.0f,
+                                        SciFiTheme::corner + 3.0f, 2.0f);
+            }
+        };
+        return std::make_unique<juce::FocusOutline> (std::make_unique<Props>());
+    }
+
+    void drawButtonBackground (juce::Graphics& g, juce::Button& button, const juce::Colour&,
+                               bool isMouseOver, bool isButtonDown) override
+    {
+        const auto r = button.getLocalBounds().toFloat().reduced (1.0f);
+        const bool on = button.getToggleState();
+        g.setColour (isButtonDown ? SciFiTheme::panelDeep
+                    : isMouseOver ? SciFiTheme::panel.brighter (0.25f)
+                    : on ? SciFiTheme::neon.withAlpha (0.16f) : SciFiTheme::panelDeep);
+        g.fillRoundedRectangle (r, SciFiTheme::corner);
+        g.setColour (on || isMouseOver ? SciFiTheme::neon.withAlpha (on ? 1.0f : 0.45f) : SciFiTheme::strokeDim);
+        g.drawRoundedRectangle (r, SciFiTheme::corner, 1.0f);
     }
 
     juce::Font getTextButtonFont (juce::TextButton&, int) override
@@ -54,6 +89,12 @@ public:
         g.fillRoundedRectangle (r.toFloat(), SciFiTheme::corner);
         g.setColour (box.findColour (ComboBox::outlineColourId));
         g.drawRoundedRectangle (r.toFloat().reduced (0.5f), SciFiTheme::corner, 1.0f);
+        if (box.hasKeyboardFocus (true))
+        {
+            g.setColour (SciFiTheme::neon.withAlpha (0.85f));
+            g.drawRoundedRectangle (r.toFloat().reduced (0.5f).expanded (2.0f),
+                                    SciFiTheme::corner + 2.0f, 2.0f);
+        }
 
         const Rectangle<int> arrow (width - 26, 0, 20, height);
         juce::Path p;
@@ -62,10 +103,6 @@ public:
         p.lineTo ((float) arrow.getRight() - 3.0f, (float) arrow.getCentreY() - 2.0f);
         g.setColour (SciFiTheme::neon.withAlpha (0.85f));
         g.strokePath (p, PathStrokeType (1.6f));
-
-        g.setColour (SciFiTheme::text);
-        g.setFont (juce::Font (juce::FontOptions (12.0f)));
-        g.drawFittedText (box.getText(), r.reduced (10, 0).withTrimmedRight (24), Justification::centredLeft, 1);
     }
 
     void drawToggleButton (juce::Graphics& g, juce::ToggleButton& button, bool, bool) override
@@ -77,6 +114,11 @@ public:
         g.fillRoundedRectangle (r, SciFiTheme::corner);
         g.setColour (on ? SciFiTheme::neon : SciFiTheme::stroke);
         g.drawRoundedRectangle (r, SciFiTheme::corner, 1.0f);
+        if (button.hasKeyboardFocus (true))
+        {
+            g.setColour (SciFiTheme::neon.withAlpha (0.85f));
+            g.drawRoundedRectangle (r.expanded (2.0f), SciFiTheme::corner + 2.0f, 2.0f);
+        }
         g.setColour (on ? SciFiTheme::neon : SciFiTheme::text);
         g.setFont (juce::Font (juce::FontOptions (12.0f)));
         g.drawFittedText (button.getButtonText(), button.getLocalBounds().reduced (6, 0),
@@ -88,12 +130,23 @@ public:
                            juce::Slider& slider) override
     {
         using namespace juce;
+        if (slider.hasKeyboardFocus (true))
+        {
+            g.setColour (SciFiTheme::neon.withAlpha (0.85f));
+            g.drawRoundedRectangle (Rectangle<float> (x, y, width, height).reduced (1.0f),
+                                    SciFiTheme::corner + 4.0f, 2.0f);
+        }
         const float cx = (float) x + (float) width * 0.5f;
         const float cy = (float) y + (float) height * 0.5f;
         const float outer = juce::jmin ((float) width, (float) height) * 0.5f - 2.0f;
         const float trackR = outer - 5.0f;
         const float bodyR  = trackR - 4.0f;
         const float norm   = juce::jlimit (0.0f, 1.0f, sliderPos);
+        if (slider.isMouseOver())
+        {
+            g.setColour (SciFiTheme::neon.withAlpha (0.06f));
+            g.fillEllipse (cx - outer - 2.0f, cy - outer - 2.0f, (outer + 2.0f) * 2.0f, (outer + 2.0f) * 2.0f);
+        }
         const float angle  = rotaryStartAngle + norm * (rotaryEndAngle - rotaryStartAngle)
                              - MathConstants<float>::halfPi;
         const Colour fill  = SciFiTheme::neon;

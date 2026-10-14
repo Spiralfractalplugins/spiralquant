@@ -1,0 +1,134 @@
+# How SpiralQuant Works
+
+## 1. Общий signal path
+
+```text
+MIDI note
+  -> QuantumVoice (per voice)
+      -> QuantumOsc (complex wavefunction psi[x])
+          -> phase readout -> wavetable sample
+      -> ADSR envelope
+      -> resonant low-pass
+      -> drive / saturation
+      -> voice gain
+  -> QuantumEngine (sum up to 8 voices)
+  -> MasterFx (optional Flanger / Phaser / Bitcrush / Fractal Entropy)
+  -> stereo output
+  -> scope: |psi| from first active voice
+```
+
+Плагин генерирует звук не из классической wavetable, а из численного решения
+1D time-dependent Schrödinger equation на сетке из 128 точек.
+
+## 2. `QuantumOsc`: волновая функция
+
+`psi[x]` — комплексное значение на координатной сетке:
+
+```text
+x_i = 2 * i / (N - 1) - 1,   i = 0..127, N = 128
+```
+
+### Начальное состояние
+В зависимости от `waveType` генерируется:
+- Gaussian с центром `waveShift`, шириной от `waveScale`, фазой от `waveImpulse`;
+- Sine/Cos с волновым числом от `waveScale`;
+- Parabola, Saw, Square.
+
+После генерации функция нормализуется:
+
+```text
+sum |psi[i]|^2 -> 1
+```
+
+### Потенциал
+`potential[i]` строится по `potentialType`:
+- Flat
+- Harmonic
+- InfiniteWell
+- Barrier
+- DoubleWell
+- Linear
+
+Параметры `potentialShift`, `potentialScale`, `potentialHeight` меняют положение,
+жёсткость/ширину и масштаб потенциала.
+
+## 3. Эволюция по времени: split-step Fourier
+
+Каждый timestep:
+
+1. Половина потенциального шага в координатном пространстве:
+   `psi *= exp(-i * dt * V(x))`
+2. FFT в импульсное пространство.
+3. Кинетический шаг:
+   `psi[k] *= exp(-i * (2*pi/N)^2 * dt * k^2)`
+4. Обратное FFT в координатное пространство, если `showFFT == false`.
+5. Нормировка `|psi|^2 -> 1`.
+6. При барьерах/бесконечной яме маска обнуляет волновую функцию в запрещённых областях.
+
+`showFFT` включает работу в импульсном пространстве: wavetable читается из
+моментальной representation.
+
+## 4. Чтение wavetable
+Фаза осциллятора:
+
+```text
+phase += (frequency / sampleRate) * N
+```
+
+Сэмпл:
+
+```text
+psiInterpolated = (1 - frac) * psi[i0] + frac * psi[i1]
+```
+
+`sampleMode` решает, что вернуть:
+- Real
+- Imag
+- Magnitude
+- Phase
+
+`samplesPerTimestep` определяет, через сколько аудиосэмплов делается один
+квантовый timestep. `timestepDelta` — длительность квантового шага.
+
+## 5. Голос
+Каждый голос:
+- хранит playing frequency и делает плавный glide к target frequency;
+- при `noteOn` запускает осциллятор (`trigger()`), если голос был idle;
+- envelope ADSR;
+- IIR low-pass с динамическим пересчётом коэффициентов;
+- опциональный drive/насыщение;
+- gain.
+
+При `noteOff` envelope переходит в Release, после чего голос становится idle.
+
+## 6. Полифония
+`QuantumEngine` хранит 8 голосов. При Note On:
+- сначала ищет idle voice;
+- если все заняты, крадёт самый старый активный голос.
+
+Суммирование идёт в mono, затем копируется во все выходные каналы.
+
+## 7. Master FX
+После суммы голосов применяется выбранный эффект:
+- Off
+- Flanger (`juce::dsp::Chorus`)
+- Phaser (`juce::dsp::Phaser`)
+- Bitcrush (снижение разрядности и sample-rate)
+- Fractal Entropy (хаотическая модуляция + entropy noise)
+
+`fxMix`, `fxDepth`, `fxRate`, `fxFeedback`, `fxBits`, `fxEntropy` управляют
+эффектами. Solo режимы: Full / Dry / Wet.
+
+## 8. UI и scope
+Scope показывает `|psi|` первого активного голоса. Интерфейс использует direct
+manipulation: перетаскивание положения/ширины волны и потенциала на графике,
+draggable ADSR-кривая, hover-значения.
+
+## 9. State save
+Параметры хранятся в `AudioProcessorValueTreeState`, поэтому automation и
+state save/restore поддерживаются через XML.
+
+## 10. Текущие ограничения
+- `applyWavefunction` выведен в automation, но DSP сейчас всегда эволюционирует волну.
+- `SequenceEditorComponent` и Gate widgets не скомпилированы в текущую сборку.
+- `samplesPerTimestep` в UI подаётся через normalized-значения APVTS.

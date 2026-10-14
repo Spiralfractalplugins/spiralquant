@@ -58,34 +58,54 @@ void MasterFx::process (juce::AudioBuffer<float>& buffer)
     if (type == 0 || soloMode == 1)
         return;
 
-    if (buffer.getNumChannels() < 1 || buffer.getNumSamples() <= 0)
+    const int numChannels = buffer.getNumChannels();
+    const int numSamples = buffer.getNumSamples();
+    if (numChannels < 1 || numSamples <= 0)
         return;
 
-    // ensure stereo working buffer
-    if (buffer.getNumChannels() == 1)
-    {
-        buffer.setSize (2, buffer.getNumSamples(), true, true, true);
-    }
+    // Render through a persistent stereo scratch buffer: never resize the
+    // caller's buffer in the audio callback (setSize can reallocate).
+    if (scratch.getNumSamples() < numSamples || scratch.getNumChannels() != 2)
+        scratch.setSize (2, numSamples, true, false, false);
 
+    scratch.clear();
+    scratch.copyFrom (0, 0, buffer, 0, 0, numSamples);
+    if (numChannels > 1)
+        scratch.copyFrom (1, 0, buffer, 1, 0, numSamples);
     if (type == 1)
     {
-        juce::dsp::AudioBlock<float> block (buffer);
+        juce::dsp::AudioBlock<float> block (scratch);
         juce::dsp::ProcessContextReplacing<float> ctx (block);
         chorus.process (ctx);
     }
     else if (type == 2)
     {
-        juce::dsp::AudioBlock<float> block (buffer);
+        juce::dsp::AudioBlock<float> block (scratch);
         juce::dsp::ProcessContextReplacing<float> ctx (block);
         phaser.process (ctx);
     }
     else if (type == 3)
     {
-        processBitcrush (buffer);
+        processBitcrush (scratch);
     }
     else if (type == 4)
     {
-        processFractal (buffer);
+        processFractal (scratch);
+    }
+
+    float* dst0 = buffer.getWritePointer (0);
+    const float* src0 = scratch.getReadPointer (0);
+    const float* src1 = scratch.getReadPointer (1);
+    if (numChannels == 1)
+        for (int i = 0; i < numSamples; ++i) dst0[i] = src0[i];
+    else
+    {
+        for (int c = 1; c < numChannels; ++c)
+            if (c < 2)
+                juce::FloatVectorOperations::copy (buffer.getWritePointer (c), src1, numSamples);
+            else
+                juce::FloatVectorOperations::clear (buffer.getWritePointer (c), numSamples);
+        for (int i = 0; i < numSamples; ++i) dst0[i] = src0[i];
     }
 
     // sanitize
@@ -100,53 +120,59 @@ void MasterFx::process (juce::AudioBuffer<float>& buffer)
 void MasterFx::processBitcrush (juce::AudioBuffer<float>& buffer)
 {
     const int numSamples = buffer.getNumSamples();
-    const int levels = 1 << (int) std::round (bits);
+    const float levels = (float) (1 << (int) std::round (bits));
     const int period = 1 + (int) std::round (depth * 15.0f);
 
     float* l = buffer.getWritePointer (0);
-    float* r = buffer.getNumChannels() > 1 ? buffer.getWritePointer (1) : l;
+    float* r = buffer.getWritePointer (1);
+    const float dryWet = 1.0f - mix;
 
     for (int i = 0; i < numSamples; ++i)
     {
         if (holdCounter >= (float) period)
         {
-            heldL = std::round (l[i] * (float) levels) / (float) levels;
-            heldR = std::round (r[i] * (float) levels) / (float) levels;
+            heldL = std::round (l[i] * levels) / levels;
+            heldR = std::round (r[i] * levels) / levels;
             holdCounter = 0.0f;
-        }
-        else
-        {
-            // keep held values while waiting; l[i] still advances position
         }
         ++holdCounter;
 
         const float dryL = l[i];
         const float dryR = r[i];
-        const float wetL = heldL;
-        const float wetR = heldR;
-        l[i] = dryL * (1.0f - mix) + wetL * mix;
-        r[i] = dryR * (1.0f - mix) + wetR * mix;
+        l[i] = dryL * dryWet + heldL * mix;
+        r[i] = dryR * dryWet + heldR * mix;
     }
+}
+
+float MasterFx::nextNoise()
+{
+    // xorshift32: ~3 ops per sample, no shared global state
+    rngState ^= rngState << 13;
+    rngState ^= rngState >> 17;
+    rngState ^= rngState << 5;
+    return ((float) (rngState >> 8) / 8388608.0f) - 0.5f; // [-0.5, 0.5)
 }
 
 void MasterFx::processFractal (juce::AudioBuffer<float>& buffer)
 {
     const int numSamples = buffer.getNumSamples();
     const float lfoInc = (juce::MathConstants<float>::twoPi * rate) / (float) sampleRate;
-    const int levels = 1 << (int) std::round (juce::jlimit (2.0f, 16.0f, bits));
     const int period = 1 + (int) std::round (depth * 12.0f);
 
     float* l = buffer.getWritePointer (0);
-    float* r = buffer.getNumChannels() > 1 ? buffer.getWritePointer (1) : l;
+    float* r = buffer.getWritePointer (1);
 
-    juce::Random& rng = juce::Random::getSystemRandom();
+    const float levelsF = (float) (1 << (int) std::round (juce::jlimit (2.0f, 16.0f, bits)));
+    const float invLevels = 1.0f / levelsF;
+    const float dryWet = 1.0f - mix;
+    const float noiseAmp = entropyAmount * 0.04f;
 
     for (int i = 0; i < numSamples; ++i)
     {
         if (holdCounter >= (float) period)
         {
-            heldL = std::round (l[i] * (float) levels) / (float) levels;
-            heldR = std::round (r[i] * (float) levels) / (float) levels;
+            heldL = std::round (l[i] * levelsF) * invLevels;
+            heldR = std::round (r[i] * levelsF) * invLevels;
             holdCounter = 0.0f;
         }
         ++holdCounter;
@@ -161,15 +187,13 @@ void MasterFx::processFractal (juce::AudioBuffer<float>& buffer)
 
         const float chaosMod = 1.0f + entropyAmount * (chaosState - 0.5f) * 0.8f;
         const float wobble = 1.0f + 0.25f * entropyAmount * std::sin (lfoPhase * 3.7f);
-        const float rndL = (rng.nextFloat() - 0.5f) * entropyAmount * 0.04f;
-        const float rndR = (rng.nextFloat() - 0.5f) * entropyAmount * 0.04f;
+        const float gainMod = chaosMod * wobble;
+        const float rndL = nextNoise() * noiseAmp;
+        const float rndR = nextNoise() * noiseAmp;
 
         const float dryL = l[i];
         const float dryR = r[i];
-        const float wetL = (heldL * chaosMod * wobble) + rndL;
-        const float wetR = (heldR * chaosMod * wobble) + rndR;
-
-        l[i] = dryL * (1.0f - mix) + wetL * mix;
-        r[i] = dryR * (1.0f - mix) + wetR * mix;
+        l[i] = dryL * dryWet + (heldL * gainMod + rndL) * mix;
+        r[i] = dryR * dryWet + (heldR * gainMod + rndR) * mix;
     }
 }

@@ -31,6 +31,10 @@ private:
 
     float chaosState = 0.37f;
     float fractalAcc = 0.0f;
+    std::uint32_t rngState = 0x9e3779b9u;
+    juce::AudioBuffer<float> scratch;
+
+    float nextNoise();
 
     void processBitcrush (juce::AudioBuffer<float>& buffer);
     void processFractal (juce::AudioBuffer<float>& buffer);

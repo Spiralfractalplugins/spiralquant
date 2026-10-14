@@ -26,13 +26,40 @@ void QuantumEngine::setParams (float attack, float decay, float sustain, float r
                     float filterFreq, float filterRes, float drive, float satMix, float gain,
                     int waveType, float waveShift, float waveScale, float waveImpulse,
                     int potentialType, float potentialShift, float potentialScale, float potentialHeight,
-                    int showFFT, int sampleMode, float timestepDelta, float samplesPerTimestep, bool applyWavefunction)
+                    int showFFT, int sampleMode, float timestepDelta, float samplesPerTimestep, bool applyWavefunction,
+                    bool chordOn, int chordTypeSel, float pitchCents, bool tunnel)
 {
+    chordMode = chordOn;
+    chordType = juce::jlimit (0, 7, chordTypeSel);
     for (int i = 0; i < MAX_VOICES; ++i)
         voices[i].setParams (attack, decay, sustain, release, filterFreq, filterRes, drive, satMix, gain,
                              waveType, waveShift, waveScale, waveImpulse,
                              potentialType, potentialShift, potentialScale, potentialHeight,
-                             showFFT, sampleMode, timestepDelta, samplesPerTimestep, applyWavefunction);
+                             showFFT, sampleMode, timestepDelta, samplesPerTimestep, applyWavefunction,
+                             pitchCents, tunnel);
+}
+
+// Chord degrees as just-intonation ratios. Consonant chords use small
+// integers (low harmonic-number clash); dissonant ones use large coprimes.
+int QuantumEngine::chordSize (int type)
+{
+    static const int sizes[] = { 2, 3, 3, 3, 3, 2, 3, 4 };
+    return sizes[juce::jlimit (0, 7, type)];
+}
+
+float QuantumEngine::chordRatio (int type, int degree)
+{
+    switch (juce::jlimit (0, 7, type))
+    {
+        case 0: { static const float r[] = { 1.0f, 3.0f / 2.0f }; return r[degree]; }            // Power (perfect fifth)
+        case 1: { static const float r[] = { 1.0f, 5.0f / 4.0f, 3.0f / 2.0f }; return r[degree]; } // Major
+        case 2: { static const float r[] = { 1.0f, 6.0f / 5.0f, 3.0f / 2.0f }; return r[degree]; } // Minor
+        case 3: { static const float r[] = { 1.0f, 4.0f / 3.0f, 3.0f / 2.0f }; return r[degree]; } // Sus4
+        case 4: { static const float r[] = { 1.0f, 5.0f / 4.0f, 15.0f / 8.0f }; return r[degree]; } // Major 7th
+        case 5: { static const float r[] = { 1.0f, 45.0f / 32.0f }; return r[degree]; }          // Tritone (dissonant)
+        case 6: { static const float r[] = { 1.0f, 16.0f / 15.0f, 256.0f / 225.0f }; return r[degree]; } // Cluster
+        default: { static const float r[] = { 1.0f, 64.0f / 45.0f, 36.0f / 25.0f, 21.0f / 16.0f }; return r[degree]; } // Pythagorean mess
+    }
 }
 
 void QuantumEngine::setFxParams (int type, float depth, float rate, float feedback, float mix, float bits, float entropy, int soloMode)
@@ -42,22 +69,28 @@ void QuantumEngine::setFxParams (int type, float depth, float rate, float feedba
 
 void QuantumEngine::handleNoteOn (int note, int velocity)
 {
-    int idx = -1;
-    for (int i = 0; i < MAX_VOICES; ++i)
-        if (! voices[i].isActive()) { idx = i; break; }
-    if (idx == -1)
+    const int degrees = chordMode ? chordSize (chordType) : 1;
+    for (int d = 0; d < degrees; ++d)
     {
-        // steal oldest voice
-        unsigned long long oldest = nextAge;
-        int oldestIdx = 0;
+        int idx = -1;
         for (int i = 0; i < MAX_VOICES; ++i)
-            if (voices[i].isActive() && voiceAge[i] < oldest) { oldest = voiceAge[i]; oldestIdx = i; }
-        idx = oldestIdx;
-        voices[idx].noteOff();
+            if (! voices[i].isActive()) { idx = i; break; }
+        if (idx == -1)
+        {
+            // steal oldest voice
+            unsigned long long oldest = nextAge;
+            int oldestIdx = 0;
+            for (int i = 0; i < MAX_VOICES; ++i)
+                if (voices[i].isActive() && voiceAge[i] < oldest) { oldest = voiceAge[i]; oldestIdx = i; }
+            idx = oldestIdx;
+            voices[idx].noteOff();
+        }
+        const float velScale = 1.0f / (1.0f + 0.35f * (float) d);
+        voices[idx].noteOn (note, juce::jlimit (1, 127, juce::roundToInt ((float) velocity * velScale)),
+                            chordMode ? chordRatio (chordType, d) : 1.0f);
+        voiceNote[idx] = note;
+        voiceAge[idx] = nextAge++;
     }
-    voices[idx].noteOn (note, velocity);
-    voiceNote[idx] = note;
-    voiceAge[idx] = nextAge++;
 }
 
 void QuantumEngine::handleNoteOff (int note)
@@ -81,14 +114,24 @@ void QuantumEngine::process (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&
     midi.clear();
 
     float* ch0 = (numChannels > 0) ? buffer.getWritePointer (0) : nullptr;
-    for (int i = 0; i < numSamples; ++i)
+    if (running && ch0 != nullptr)
     {
-        float sample = 0.0f;
-        if (running)
+        for (int v = 0; v < MAX_VOICES; ++v)
+            if (voices[v].isActive())
+                voices[v].prepareBlock();
+
+        for (int i = 0; i < numSamples; ++i)
+        {
+            float sample = 0.0f;
             for (int v = 0; v < MAX_VOICES; ++v)
                 if (voices[v].isActive())
                     sample += voices[v].process (nullptr);
-        if (ch0) ch0[i] = sample;
+            ch0[i] = sample;
+        }
+    }
+    else if (ch0 != nullptr)
+    {
+        juce::FloatVectorOperations::clear (ch0, numSamples);
     }
 
     if (numChannels > 1)

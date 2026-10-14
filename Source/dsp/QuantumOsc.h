@@ -22,6 +22,9 @@ public:
     void setPotential (int potentialType, float potentialShift, float potentialScale, float potentialHeight);
     void setWaveParameters (int waveType, float waveShift, float waveScale, float waveImpulse);
     void setEvolution (int showFFT, int sampleMode, float timestepDelta, float samplesPerTimestep);
+    void setTunneling (bool enabled);
+    bool hasTunneling() const { return tunnelOn; }
+    void markTablesDirty() { tablesDirty = true; }
     void trigger ();
 
     /** Returns one wavetable sample advance. Phase is in [0, SIZE). */
@@ -36,9 +39,10 @@ public:
 private:
     void generateInitial();
     void computePotential();
+    void rebuildTables();
     void doTimestep (float dt);
-    std::complex<float> sampleWave (float index) const;
-    float toReal (std::complex<float> v) const;
+    inline std::complex<float> sampleWave (float index) const;
+    inline float toReal (std::complex<float> v) const;
 
     double sampleRate = 48000.0;
     int waveType = 0;
@@ -55,11 +59,16 @@ private:
     float samplesPerTimestep = 8.0f;
     float preStartSteps = 4.0f;
     bool applyWavefunction = true;
+    bool tunnelOn = false;
 
     std::complex<float> psi[SIZE];
     std::complex<float> psiFFT[SIZE];
     float potential[SIZE];
     bool mask[SIZE];
+    std::complex<float> potPhase[SIZE];   // exp(j * dt * potential[i])
+    std::complex<float> kinPhase[SIZE];   // exp(j * PRE * k^2)
+    bool tablesDirty = true;
+    float tableDt = -1.0f;
     bool inFrequencyDomain = false;
 
     float phase = 0.0f;

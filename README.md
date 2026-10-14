@@ -29,6 +29,15 @@ a split-step Fourier method on a 128-point grid.
 - **Per-voice envelope**: ADSR.
 - **Filter/saturation**: resonant low-pass, drive, saturation mix, master gain.
 - **Scope**: 128-point display of `|ψ|` from the first active voice.
+- **Chord mode**: each key triggers a just-intonation voicing — consonant chords
+  (Power, Major, Minor, Sus4, Major 7th) and dissonant ones (Tritone, Cluster,
+  Pythagorean); extra degrees get a velocity falloff.
+- **Pitch shift**: ±2400 cents applied as `f · 2^(cents/1200)` at note start and
+  on every change.
+- **Tunneling**: Gamow transparency `T = exp(-2κL)` leaks the wave through the
+  potential barrier instead of hard-reflecting it (κ from `√(2m(V−E))`).
+- **Preset browser**: factory presets embedded at build time, user presets saved
+  as `.sp303preset` JSON in the app-support folder.
 
 ## Parameters
 
@@ -63,6 +72,11 @@ a split-step Fourier method on a 128-point grid.
 | `fxMix`              | float    | 0.0 – 1.0                                     | 0.5     |
 | `fxBits`             | float    | 2 – 16                                        | 8       |
 | `fxEntropy`          | float    | 0.0 – 1.0                                     | 0.5     |
+| `chordMode`          | bool     | —                                             | false   |
+| `chordType`          | choice   | Power / Major / Minor / Sus4 / Major7 / Tritone / Cluster / Pythagorean | 1 (Major) |
+| `pitchShift`         | float    | -2400 – +2400 cents                           | 0       |
+| `tunnel`             | bool     | —                                             | false   |
+
 Parameters are stored in an `AudioProcessorValueTreeState`, so host automation and
 state save/restore are supported.
 
@@ -95,7 +109,30 @@ The suite:
 
 - renders every `waveType × potentialType × sampleMode` combination (6×6×4),
   checking for NaN/inf and non-silent output;
-- exercises a state save/restore roundtrip.
+- renders the chord × pitch-shift × tunneling matrix;
+- exercises all master FX types and a state save/restore roundtrip;
+- `--bench` runs a deterministic 20 000-block, 8-voice CPU benchmark;
+- `--render-logo <dir>` regenerates `resources/logo.png` and the iconset PNGs
+  from the vector `LogoMark` (used to refresh `resources/icons/SpiralQuant.icns`
+  via `iconutil`).
+
+## Build options
+
+```sh
+# Aggressive math (fastest; changes denormal/FPA behaviour, NaN guards remain)
+cmake -S . -B build -DSPIRALQUANT_OFAST=ON
+
+# Profile-guided optimization:
+cmake -S . -B build-pgo -DSPIRALQUANT_PGO=generate   # instrumented build
+cmake --build build-pgo --target SpiralQuantTests
+./build-pgo/SpiralQuantTests_artefacts/Release/SpiralQuantTests --bench   # train
+xcrun llvm-profdata merge -output=pgo/default.profdata pgo/*.profraw
+cmake -S . -B build-pgo -DSPIRALQUANT_PGO=use       # rebuild with profile
+cmake --build build-pgo --target SpiralQuantTests
+```
+
+The default is `-O3 -fno-math-errno -ffp-contract=fast`; `-ffast-math`/-Ofast are
+opt-in because the DSP relies on `isfinite` guards for NaN rejection.
 
 It must print `ALL TESTS PASSED`.
 
@@ -104,6 +141,8 @@ It must print `ALL TESTS PASSED`.
 - `build/SpiralQuant_artefacts/Release/VST3/SpiralQuant.vst3`
 - `build/SpiralQuant_artefacts/Release/AU/SpiralQuant.component`
 - `build/SpiralQuant_artefacts/Release/Standalone/SpiralQuant.app`
+
+See [How it works](docs/HOW_IT_WORKS.md) for the signal path and sound generation details.
 
 ## Presets
 

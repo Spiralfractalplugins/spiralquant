@@ -18,8 +18,11 @@ void QuantumOsc::reset (int wt, float ws, float wsc, float wi,
 
 void QuantumOsc::setPotential (int pt, float ps, float psc, float ph)
 {
+    if (pt == potentialType && ps == potentialShift && psc == potentialScale && ph == potentialHeight)
+        return;
     potentialType = pt; potentialShift = ps; potentialScale = psc; potentialHeight = ph;
     computePotential();
+    tablesDirty = true;
 }
 
 void QuantumOsc::setWaveParameters (int wt, float ws, float wsc, float wi)
@@ -30,6 +33,24 @@ void QuantumOsc::setWaveParameters (int wt, float ws, float wsc, float wi)
 void QuantumOsc::setEvolution (int sf, int sm, float td, float spt)
 {
     showFFT = sf; sampleMode = sm; timestepDelta = td; samplesPerTimestep = spt;
+}
+
+void QuantumOsc::rebuildTables()
+{
+    const float dt = timestepDelta;
+    const float PRE = std::pow (juce::MathConstants<float>::twoPi / (float) SIZE, 2) * dt;
+
+    for (int i = 0; i < SIZE; ++i)
+        potPhase[i] = std::polar (1.0f, dt * potential[i]);
+
+    for (int i = 0; i < SIZE; ++i)
+    {
+        const int k = (i <= SIZE / 2) ? i : i - SIZE;
+        kinPhase[i] = std::polar (1.0f, PRE * (float) (k * k));
+    }
+
+    tableDt = dt;
+    tablesDirty = false;
 }
 
 void QuantumOsc::trigger ()
@@ -94,6 +115,14 @@ void QuantumOsc::generateInitial ()
     for (int i = 0; i < SIZE; ++i) psi[i] /= s;
 }
 
+void QuantumOsc::setTunneling (bool enabled)
+{
+    if (tunnelOn == enabled)
+        return;
+    tunnelOn = enabled;
+    computePotential();
+}
+
 void QuantumOsc::computePotential ()
 {
     for (int i = 0; i < SIZE; ++i)
@@ -141,15 +170,35 @@ void QuantumOsc::computePotential ()
         potential[i] = v;
         mask[i] = m;
     }
+
+    if (tunnelOn)
+    {
+        // Gamow transparency T = exp(-2 kappa L), kappa = sqrt(2m(V-E)).
+        // Wave energy E ~ vmax/3 (dominant confined eigenmode); the grid
+        // dx is mapped to an effective barrier width so narrow barriers
+        // leak audibly while wide ones stay near-opaque.
+        float vmax = 0.0f;
+        for (int i = 0; i < SIZE; ++i) vmax = juce::jmax (vmax, potential[i]);
+        const float e = vmax / 3.0f;
+        for (int i = 0; i < SIZE; ++i)
+        {
+            if (mask[i]) continue;
+            const float v = juce::jmax (0.0f, potential[i] - e);
+            const float kappa = std::sqrt (2.0f * v) * 0.01f;
+            potential[i] *= std::exp (-2.0f * kappa);
+            mask[i] = true; // partial transmission instead of hard zero
+        }
+    }
 }
 
 void QuantumOsc::doTimestep (float dt)
 {
-    const float PRE = std::pow (juce::MathConstants<float>::twoPi / (float) SIZE, 2) * dt;
+    if (tablesDirty || dt != tableDt)
+        rebuildTables();
 
     // potential part in position domain
     for (int i = 0; i < SIZE; ++i)
-        psi[i] *= std::polar (1.0f, dt * potential[i]);
+        psi[i] *= potPhase[i];
 
     // FFT to momentum domain
     fft.perform (psi, psiFFT, false);
@@ -157,30 +206,33 @@ void QuantumOsc::doTimestep (float dt)
     for (int i = 0; i < SIZE; ++i) psiFFT[i] *= invSqrt;
 
     // kinetic part
-    for (int i = 0; i < SIZE / 2; ++i)
-    {
-        psiFFT[i] *= std::polar (1.0f, PRE * (float) (i * i));
-        psiFFT[SIZE - (i + 1)] *= std::polar (1.0f, PRE * (float) ((i + 1) * (i + 1)));
-    }
+    for (int i = 0; i < SIZE; ++i)
+        psiFFT[i] *= kinPhase[i];
 
     if (! showFFT)
     {
         fft.perform (psiFFT, psi, true);
         for (int i = 0; i < SIZE; ++i) psi[i] *= invSqrt;
 
-        // barrier mask + normalise
+        // barrier mask + norm accumulation in one pass
+        float s = 0.0f;
         for (int i = 0; i < SIZE; ++i)
+        {
             if (! mask[i]) psi[i] = std::complex<float> (0.0f, 0.0f);
+            s += std::norm (psi[i]);
+        }
+        s = 1.0f / std::sqrt (std::max (1.0e-12f, s));
+        for (int i = 0; i < SIZE; ++i) psi[i] *= s;
     }
     else
     {
         for (int i = 0; i < SIZE; ++i) psi[i] = psiFFT[i];
-    }
 
-    float s = 0.0f;
-    for (int i = 0; i < SIZE; ++i) s += std::norm (psi[i]);
-    s = std::sqrt (std::max (1.0e-12f, s));
-    for (int i = 0; i < SIZE; ++i) psi[i] /= s;
+        float s = 0.0f;
+        for (int i = 0; i < SIZE; ++i) s += std::norm (psi[i]);
+        s = 1.0f / std::sqrt (std::max (1.0e-12f, s));
+        for (int i = 0; i < SIZE; ++i) psi[i] *= s;
+    }
     inFrequencyDomain = (showFFT != 0);
 }
 
@@ -210,7 +262,7 @@ float QuantumOsc::getNextSample (float phaseIncrement)
 
     const std::complex<float> v = sampleWave (phase);
     phase += phaseIncrement;
-    if (phase >= (float) SIZE) phase = std::fmod (phase, (float) SIZE);
+    if (phase >= (float) SIZE) phase -= (float) SIZE;
     if (phase < 0.0f) phase = 0.0f;
 
     return toReal (v);
@@ -218,12 +270,11 @@ float QuantumOsc::getNextSample (float phaseIncrement)
 
 std::complex<float> QuantumOsc::sampleWave (float index) const
 {
-    int i0 = (int) std::floor (index);
-    int i1 = i0 + 1;
+    int i0 = (int) index;
+    const float frac = index - (float) i0;
     if (i0 < 0) i0 = 0;
     if (i0 >= SIZE) i0 = SIZE - 1;
-    if (i1 >= SIZE) i1 = 0;
-    const float frac = index - std::floor (index);
+    const int i1 = (i0 + 1 == SIZE) ? 0 : i0 + 1;
     return psi[i0] * (1.0f - frac) + psi[i1] * frac;
 }
 

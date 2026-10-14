@@ -14,7 +14,8 @@ public:
                     float filterFreq, float filterRes, float drive, float satMix, float gain,
                     int waveType, float waveShift, float waveScale, float waveImpulse,
                     int potentialType, float potentialShift, float potentialScale, float potentialHeight,
-                    int showFFT, int sampleMode, float timestepDelta, float samplesPerTimestep, bool applyWavefunction);
+                    int showFFT, int sampleMode, float timestepDelta, float samplesPerTimestep, bool applyWavefunction,
+                    bool chordOn = false, int chordType = 0, float pitchCents = 0.0f, bool tunnel = false);
     void setFxParams (int type, float depth, float rate, float feedback, float mix, float bits, float entropy, int soloMode);
 
     const float* getScopeWave() const { return scopeWave; }
@@ -27,6 +28,10 @@ private:
     unsigned long long nextAge = 1;
     double sampleRate = 48000.0;
     float scopeWave[QuantumOsc::SIZE] {};
+    bool chordMode = false;
+    int chordType = 0;
     void handleNoteOn (int note, int velocity);
     void handleNoteOff (int note);
+    static int chordSize (int type);
+    static float chordRatio (int type, int degree);
 };

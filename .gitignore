@@ -36,3 +36,8 @@ Thumbs.db
 
 # Logs
 *.log
+.agents/skills/
+build*/
+pgo/
+docs/screenshots/
+skills-lock.json
