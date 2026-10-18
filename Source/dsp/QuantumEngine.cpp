@@ -40,11 +40,14 @@ void QuantumEngine::setParams (float attack, float decay, float sustain, float r
                     int potentialType, float potentialShift, float potentialScale, float potentialHeight,
                     int showFFT, int sampleMode, float timestepDelta, float samplesPerTimestep, bool applyWavefunction,
                     int chordModeSel, int chordTypeSel, float pitchCents, bool tunnel, float jumpRate, float quadrature,
-                    float memoryAmt, float memoryTimeMs, float ringdown, bool walkOnSel, float walkRateHz, bool limiter)
+                    float memoryAmt, float memoryTimeMs, float ringdown, bool walkOnSel, float walkRateHz, bool limiter,
+                    float zeno, bool entangle, float squeeze)
 {
     chordMode = juce::jlimit (0, 2, chordModeSel);
     chordType = juce::jlimit (0, 7, chordTypeSel);
     limiterOn = limiter;
+    entangleOn = entangle;
+    jumpRateAmt = jumpRate;
 
     if (walkOnSel && ! walkOn)
         resetWalk();
@@ -61,7 +64,7 @@ void QuantumEngine::setParams (float attack, float decay, float sustain, float r
                              potentialType, potentialShift, potentialScale, potentialHeight,
                              showFFT, sampleMode, timestepDelta, samplesPerTimestep, applyWavefunction,
                              pitchCents, tunnel, jumpRate, quadrature,
-                             memoryAmt, memoryTimeMs, ringdown);
+                             memoryAmt, memoryTimeMs, ringdown, zeno, squeeze);
     if (walkRateHz != cachedWalkRate)
     {
         cachedWalkRate = walkRateHz;

@@ -65,6 +65,8 @@ private:
     // peak above the threshold with a ~1 ms attack and ~80 ms release, then a
     // final ±1 clamp guarantees the output can never exceed full scale.
     bool limiterOn = true;
+    bool entangleOn = false;
+    float jumpRateAmt = 0.0f;
     float limGain = 1.0f;
     float limAttack = 0.0f;
     float limRelease = 0.0f;
