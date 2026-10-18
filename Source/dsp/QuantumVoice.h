@@ -86,6 +86,7 @@ private:
         bool apply; float cents; bool tunnel;
         float jr, qd;
         float mem, memT, rd;
+        float zn, sq;
 
         bool operator== (const LastInputs& o) const
         {
@@ -96,7 +97,8 @@ private:
                 && sf == o.sf && smode == o.smode && td == o.td && spt == o.spt
                 && apply == o.apply && cents == o.cents && tunnel == o.tunnel
                 && jr == o.jr && qd == o.qd
-                && mem == o.mem && memT == o.memT && rd == o.rd;
+                && mem == o.mem && memT == o.memT && rd == o.rd
+                && zn == o.zn && sq == o.sq;
         }
     };
     LastInputs last {};

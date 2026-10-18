@@ -40,13 +40,14 @@ void QuantumVoice::setParams (float a, float d, float s, float r,
                               int pt, float ps, float psc, float ph,
                               int sf, int smode, float td, float spt, bool apply,
                               float cents, bool tunnel, float jumpRate, float quadrature,
-                              float memoryAmt, float memoryTimeMs, float ringdown)
+                              float memoryAmt, float memoryTimeMs, float ringdown,
+                              float zeno, float squeeze)
 {
     const LastInputs in { a, d, s, r, ff, fr, dr, sm, g,
                           wt, ws, wsc, wi,
                           pt, ps, psc, ph,
                           sf, smode, td, spt, apply, cents, tunnel, jumpRate, quadrature,
-                          memoryAmt, memoryTimeMs, ringdown };
+                          memoryAmt, memoryTimeMs, ringdown, zeno, squeeze };
     if (lastKnown && in == last)
         return;
 
@@ -86,6 +87,8 @@ void QuantumVoice::setParams (float a, float d, float s, float r,
     osc.setQuadrature (quadrature);
     osc.setMemory (memoryAmt, memoryTimeMs);
     osc.setRingdown (ringdown);
+    osc.setZeno (zeno);
+    osc.setSqueeze (squeeze);
 }
 
 void QuantumVoice::prepareBlock()
