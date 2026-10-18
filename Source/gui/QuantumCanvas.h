@@ -34,6 +34,7 @@ private:
     juce::Point<float> waveCenterH, waveScaleH;
     juce::Point<float> potCenterH, potHeightH, potScaleH;
     juce::Rectangle<float> plot;   // |psi(x)| drawing area inside the wave panel
+    float potCeiling = 0.0f;       // potential never grows into the wave band
 
     juce::Rectangle<float> wavePanel() const;
     juce::Rectangle<float> spectrumPanel() const;

@@ -59,8 +59,10 @@ void QuantumCanvas::updateHandles()
     const float waveX = cx + unitToXNorm (raw ("waveShift")->load()) * halfW;
     waveCenterH = { waveX, waveY };
     waveScaleH = { waveX + 12.0f + raw ("waveScale")->load() * (halfW * 0.35f), waveY };
+    potCeiling = waveY + 8.0f;
+    const float potSpan = potBase - potCeiling;
     potCenterH = { potX, potBase };
-    potHeightH = { potX, potBase - plot.getHeight() * 0.55f * raw ("potentialHeight")->load() };
+    potHeightH = { potX, potBase - potSpan * raw ("potentialHeight")->load() };
     potScaleH = { potX + (0.08f + raw ("potentialScale")->load() * 0.28f) * plot.getWidth(), potBase };
 }
 
@@ -119,7 +121,7 @@ void QuantumCanvas::paint (juce::Graphics& g)
         {
             const float px = plot.getX() + plot.getWidth() * (float) i / (float) (N - 1);
             const float v = juce::jlimit (0.0f, 1.0f, std::log1p (juce::jmax (0.0f, scopePot[i])) / logRef);
-            const float y = plot.getBottom() - v * plot.getHeight() * 0.92f;
+            const float y = plot.getBottom() - v * (plot.getBottom() - potCeiling);
             if (first) { potPath.startNewSubPath (px, y); first = false; }
             else potPath.lineTo (px, y);
         }
@@ -331,7 +333,7 @@ void QuantumCanvas::mouseDrag (const juce::MouseEvent& e)
             break;
         case PotHeight:
         {
-            const float heightNorm = juce::jlimit (0.0f, 1.0f, (plot.getBottom() - e.position.y) / (plot.getHeight() * 0.55f));
+            const float heightNorm = juce::jlimit (0.0f, 1.0f, (plot.getBottom() - e.position.y) / (plot.getBottom() - potCeiling));
             setNorm ("potentialHeight", heightNorm);
             break;
         }
