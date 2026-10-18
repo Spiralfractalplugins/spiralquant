@@ -72,12 +72,24 @@ void QuantumOsc::trigger ()
     const float invSqrt = 1.0f / std::sqrt (SIZE_F);
     for (int i = 0; i < SIZE; ++i) psiFFT[i] *= invSqrt;
     inFrequencyDomain = (showFFT != 0);
+    for (int s = 0; s < 2; ++s)
+        for (int i = 0; i < SIZE; ++i)
+            memBuf[s][i] = 0.0f;
+    memHead = 0;
+    memCountdown = memoryPushInterval();
+    damp = 1.0f;
     const int steps = (int) std::max (0.0f, preStartSteps);
     for (int i = 0; i < steps; ++i)
         doTimestep (timestepDelta);
     phase = 0.0f;
     timestepCounter = 0.0f;
     timestepCountTo = samplesPerTimestep <= 0.0f ? 1.0f : samplesPerTimestep;
+}
+
+int QuantumOsc::memoryPushInterval() const
+{
+    const float stepSeconds = (samplesPerTimestep > 0.0f ? samplesPerTimestep : 1.0f) / sampleRate;
+    return juce::jmax (1, juce::roundToInt (memoryTimeMs * 0.001f / juce::jmax (1.0e-6f, stepSeconds)));
 }
 
 void QuantumOsc::generateInitial ()
@@ -214,6 +226,19 @@ void QuantumOsc::doTimestep (float dt)
     for (int i = 0; i < SIZE; ++i)
         psi[i] *= potPhase[i];
 
+    // Non-Markovian memory: the wave also feels its own density from
+    // ~memoryTime ago (delayed Kerr-like self-phase modulation).
+    if (memoryAmt > 0.0f)
+    {
+        const float* delayed = memBuf[1 - memHead];
+        const float g = dt * 6.0f * memoryAmt;
+        for (int i = 0; i < SIZE; ++i)
+            psi[i] *= std::polar (1.0f, g * delayed[i]);
+    }
+
+    if (ringdown > 0.0f)
+        damp = juce::jmax (1.0e-6f, damp * (1.0f - ringdown * 0.033f * dt));
+
     // FFT to momentum domain
     fft.perform (psi, psiFFT, false);
     const float invSqrt = 1.0f / std::sqrt ((float) SIZE);
@@ -249,6 +274,17 @@ void QuantumOsc::doTimestep (float dt)
         for (int i = 0; i < SIZE; ++i) s += std::norm (psi[i]);
         s = 1.0f / std::sqrt (std::max (1.0e-12f, s));
         for (int i = 0; i < SIZE; ++i) psi[i] *= s;
+    }
+
+    // Publish this step's density into the ring once per delay slice, so the
+    // slot the next step reads back is ~memoryTime old.
+    if (memoryAmt > 0.0f && --memCountdown <= 0)
+    {
+        float* back = memBuf[memHead];
+        for (int i = 0; i < SIZE; ++i)
+            back[i] = std::norm (psi[i]) * SIZE_F;
+        memHead = 1 - memHead;
+        memCountdown = memoryPushInterval();
     }
     inFrequencyDomain = (showFFT != 0);
 }
@@ -323,7 +359,7 @@ float QuantumOsc::getNextSample (float phaseIncrement)
     if (phase >= (float) SIZE) phase -= (float) SIZE;
     if (phase < 0.0f) phase = 0.0f;
 
-    return toReal (v);
+    return toReal (v) * damp;
 }
 
 std::complex<float> QuantumOsc::sampleWave (float index) const

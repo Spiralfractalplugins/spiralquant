@@ -70,6 +70,17 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     params.push_back (flt ("jumpRate", "Phonon Collapse", 0.0f, 1.0f, 0.0f));
     params.push_back (flt ("frftAngle", "Quadrature Rotation", 0.0f, 1.0f, 0.0f));
 
+    // Wave 2: resonator memory, cavity ringdown, quantum walk (appended at the
+    // very end: host index stability).
+    params.push_back (flt ("memoryAmt", "Resonator Memory", 0.0f, 1.0f, 0.0f));
+    params.push_back (flt ("memoryTime", "Memory Delay", 5.0f, 2000.0f, 80.0f));
+    params.push_back (flt ("ringdown", "Cavity Ringdown", 0.0f, 1.0f, 0.0f));
+    params.push_back (bl ("walkOn", "Quantum Walk", false));
+    params.push_back (flt ("walkRate", "Walk Rate", 0.25f, 8.0f, 2.0f));
+
+    // Output limiter (appended at the very end: host index stability).
+    params.push_back (bl ("limiter", "Output Limiter", true));
+
     return { params.begin(), params.end() };
 }
 
@@ -92,7 +103,9 @@ PluginProcessor::ParamCache PluginProcessor::makeParamCache() const
              r ("fxType"), r ("fxDepth"), r ("fxRate"), r ("fxFeedback"), r ("fxMix"),
              r ("fxBits"), r ("fxEntropy"), r ("fxSolo"),
              r ("chordMode"), r ("chordType"), r ("pitchShift"), r ("tunnel"),
-             r ("chordSuperpose"), r ("jumpRate"), r ("frftAngle") };
+             r ("chordSuperpose"), r ("jumpRate"), r ("frftAngle"),
+             r ("memoryAmt"), r ("memoryTime"), r ("ringdown"), r ("walkOn"), r ("walkRate"),
+             r ("limiter") };
 }
 
 void PluginProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
@@ -127,7 +140,10 @@ void PluginProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
         static_cast<int> (params.chordType->load()),
         params.pitchShift->load(),
         params.tunnel->load() >= 0.5f,
-        params.jumpRate->load(), params.frftAngle->load());
+        params.jumpRate->load(), params.frftAngle->load(),
+        params.memoryAmt->load(), params.memoryTime->load(), params.ringdown->load(),
+        params.walkOn->load() >= 0.5f, params.walkRate->load(),
+        params.limiter->load() >= 0.5f);
 
     engine.setFxParams (
         static_cast<int> (params.fxType->load()),

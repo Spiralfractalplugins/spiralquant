@@ -17,7 +17,9 @@ public:
                     int potentialType, float potentialShift, float potentialScale, float potentialHeight,
                     int showFFT, int sampleMode, float timestepDelta, float samplesPerTimestep, bool applyWavefunction,
                     int chordMode = 0, int chordType = 0, float pitchCents = 0.0f, bool tunnel = false,
-                    float jumpRate = 0.0f, float quadrature = 0.0f);
+                    float jumpRate = 0.0f, float quadrature = 0.0f,
+                    float memoryAmt = 0.0f, float memoryTimeMs = 80.0f, float ringdown = 0.0f,
+                    bool walkOn = false, float walkRateHz = 2.0f, bool limiter = true);
     void setFxParams (int type, float depth, float rate, float feedback, float mix, float bits, float entropy, int soloMode);
 
     static constexpr int SCOPE_SIZE = QuantumOsc::SIZE;
@@ -58,8 +60,29 @@ private:
     int chordMode = 0;   // 0 off, 1 chord, 2 superposed chord
     int chordType = 0;
 
+    // Stereo-linked peak limiter on the master bus: gain chases the sample
+    // peak above the threshold with a ~1 ms attack and ~80 ms release, then a
+    // final ±1 clamp guarantees the output can never exceed full scale.
+    bool limiterOn = true;
+    float limGain = 1.0f;
+    float limAttack = 0.0f;
+    float limRelease = 0.0f;
+    void applyLimiter (juce::AudioBuffer<float>& buffer);
+
     void handleNoteOn (int note, int velocity);
     void handleNoteOff (int note);
     static int chordSize (int type);
     static float chordRatio (int type, int degree);
+
+    void resetWalk();
+    void stepWalk();
+
+    // Continuous-time quantum walk on a 16-node ring of pentatonic degrees:
+    // one Hadamard-ish spread per tick, position measured (sampled) each tick.
+    std::complex<float> walkPsi[16] {};
+    bool walkOn = false;
+    float cachedWalkRate = -1.0f;
+    int walkPlaying = -1;
+    int walkTickSamples = 0;
+    int walkCountdown = 0;
 };

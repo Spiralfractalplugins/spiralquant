@@ -33,6 +33,14 @@ public:
     void setJumpRate (float rate) { jumpRate = juce::jlimit (0.0f, 1.0f, rate); }
     /** Readout quadrature rotation: 0 = psi(x), 1 = psi(k). */
     void setQuadrature (float q) { quadrature = juce::jlimit (0.0f, 1.0f, q); }
+    /** Non-Markovian self-coupling: the potential sees |psi|^2 from delayMs ago. */
+    void setMemory (float amount, float delayMs)
+    {
+        memoryAmt = juce::jlimit (0.0f, 1.0f, amount);
+        memoryTimeMs = juce::jlimit (5.0f, 2000.0f, delayMs);
+    }
+    /** Cavity ringdown (T1 phonon loss): fades the readout while the wave persists. */
+    void setRingdown (float amount) { ringdown = juce::jlimit (0.0f, 1.0f, amount); }
     void markTablesDirty() { tablesDirty = true; }
     void trigger ();
 
@@ -53,6 +61,7 @@ private:
     void rebuildTables();
     void doTimestep (float dt);
     void maybeJump (float dt);
+    int memoryPushInterval() const;
     inline std::complex<float> sampleWave (float index) const;
     inline std::complex<float> sampleArray (const std::complex<float>* arr, float index) const;
     inline float toReal (std::complex<float> v) const;
@@ -75,6 +84,13 @@ private:
     bool tunnelOn = false;
     float jumpRate = 0.0f;
     float quadrature = 0.0f;
+    float memoryAmt = 0.0f;
+    float memoryTimeMs = 80.0f;
+    float ringdown = 0.0f;
+    float damp = 1.0f;
+    float memBuf[2][SIZE] {};
+    int memHead = 0;
+    int memCountdown = 0;
     std::mt19937 rng;
     static unsigned instanceCounter;
 

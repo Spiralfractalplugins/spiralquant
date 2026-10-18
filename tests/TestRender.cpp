@@ -262,6 +262,134 @@ int main (int argc = 1, char** argv = nullptr)
         if (stats (supOff).first > 0.0) { std::cerr << "superpose left a voice sounding after note-off\n"; return 1; }
     }
 
+    // Wave 2: resonator memory, cavity ringdown, quantum random walk melody.
+    {
+        auto run = [] (const std::vector<std::pair<const char*, float>>& settings, int blocks, bool hostNote)
+        {
+            PluginProcessor proc;
+            proc.prepareToPlay (48000.0, 512);
+            proc.apvts.getParameter ("samplesPerTimestep")->setValueNotifyingHost (0.2f);
+            proc.apvts.getParameter ("release")->setValueNotifyingHost (0.0f); // 1 ms
+            for (const auto& s : settings)
+                if (auto* p = proc.apvts.getParameter (s.first))
+                    p->setValueNotifyingHost (s.second);
+
+            juce::AudioBuffer<float> buffer (2, 512);
+            std::vector<float> out ((size_t) blocks * 512);
+            for (int b = 0; b < blocks; ++b)
+            {
+                juce::MidiBuffer m;
+                if (b == 0 && hostNote)
+                    m.addEvent (juce::MidiMessage::noteOn (1, 60, (juce::uint8) 100), 0);
+                proc.processBlock (buffer, m);
+                std::copy (buffer.getReadPointer (0), buffer.getReadPointer (0) + 512,
+                           out.begin() + (long) b * 512);
+            }
+            return out;
+        };
+
+        auto rmsBlock = [] (const std::vector<float>& v, int b) -> double
+        {
+            double e = 0.0;
+            for (int i = 0; i < 512; ++i)
+            {
+                const float x = v[(size_t) b * 512 + (size_t) i];
+                if (! std::isfinite (x)) return -1.0;
+                e += (double) x * x;
+            }
+            return std::sqrt (e / 512.0);
+        };
+
+        const auto wBase = run ({}, 16, true);
+
+        // (a) delayed self-coupling changes the evolution and stays finite.
+        const auto wMem = run ({ { "memoryAmt", 1.0f }, { "memoryTime", 0.05f } }, 16, true);
+        if (rmsBlock (wMem, 15) <= 0.0) { std::cerr << "memory silent or NaN\n"; return 1; }
+        if (wMem == wBase) { std::cerr << "memory had no effect\n"; return 1; }
+
+        // (b) ringdown: the readout fades while the note is held.
+        const auto wRd = run ({ { "ringdown", 1.0f } }, 400, true);
+        const double early = rmsBlock (wRd, 20), late = rmsBlock (wRd, 390);
+        if (early <= 0.0 || late < 0.0 || late >= early)
+        { std::cerr << "ringdown does not fade the readout: " << early << " -> " << late << "\n"; return 1; }
+
+        // (c) the walk composes notes without host MIDI, deterministically.
+        const auto w1 = run ({ { "walkOn", 1.0f } }, 200, false);
+        const auto w2 = run ({ { "walkOn", 1.0f } }, 200, false);
+        if (rmsBlock (w1, 199) <= 0.0) { std::cerr << "walk silent or NaN\n"; return 1; }
+        if (w1 != w2) { std::cerr << "walk not reproducible\n"; return 1; }
+
+        // Switching the walk off releases the held note: no stuck voices.
+        {
+            PluginProcessor proc;
+            proc.prepareToPlay (48000.0, 512);
+            proc.apvts.getParameter ("samplesPerTimestep")->setValueNotifyingHost (0.2f);
+            proc.apvts.getParameter ("release")->setValueNotifyingHost (0.0f);
+            proc.apvts.getParameter ("walkOn")->setValueNotifyingHost (1.0f);
+            juce::MidiBuffer idle;
+            juce::AudioBuffer<float> buffer (2, 512);
+            for (int b = 0; b < 100; ++b)
+                proc.processBlock (buffer, idle);
+            proc.apvts.getParameter ("walkOn")->setValueNotifyingHost (0.0f);
+            for (int b = 0; b < 60; ++b)
+                proc.processBlock (buffer, idle);
+            double e = 0.0;
+            const float* d = buffer.getReadPointer (0);
+            for (int i = 0; i < 512; ++i)
+            {
+                if (! std::isfinite (d[i])) { std::cerr << "walk-off NaN\n"; return 1; }
+                e += (double) d[i] * d[i];
+            }
+            if (e > 0.0) { std::cerr << "walk left a voice sounding after switch-off\n"; return 1; }
+        }
+    }
+
+    // Output limiter: on, a hot mix is bounded to full scale; off, it spikes past.
+    {
+        auto peakOf = [] (const std::vector<float>& v) -> float
+        {
+            float p = 0.0f;
+            for (float x : v)
+            {
+                if (! std::isfinite (x)) return -1.0f;
+                p = std::max (p, std::abs (x));
+            }
+            return p;
+        };
+
+        // Loud settings: max voice gain, full drive+saturation, chord of 3 voices.
+        const std::vector<std::pair<const char*, float>> hot =
+            { { "gain", 1.0f }, { "drive", 1.0f }, { "satMix", 1.0f },
+              { "chordMode", 1.0f }, { "samplesPerTimestep", 0.2f } };
+
+        auto hotPeak = [&hot, &peakOf] (bool limiterOn)
+        {
+            PluginProcessor proc;
+            proc.prepareToPlay (48000.0, 512);
+            proc.apvts.getParameter ("limiter")->setValueNotifyingHost (limiterOn ? 1.0f : 0.0f);
+            for (const auto& s : hot)
+                if (auto* p = proc.apvts.getParameter (s.first))
+                    p->setValueNotifyingHost (s.second);
+            juce::MidiBuffer midi, empty;
+            midi.addEvent (juce::MidiMessage::noteOn (1, 60, (juce::uint8) 127), 0);
+            juce::AudioBuffer<float> buffer (2, 512);
+            std::vector<float> out;
+            for (int b = 0; b < 32; ++b)
+            {
+                proc.processBlock (buffer, b == 0 ? midi : empty);
+                out.insert (out.end(), buffer.getReadPointer (0), buffer.getReadPointer (0) + 512);
+            }
+            return peakOf (out);
+        };
+
+        const float off = hotPeak (false);
+        const float on = hotPeak (true);
+        if (off < 0.0f || on < 0.0f) { std::cerr << "limiter test NaN\n"; return 1; }
+        if (off <= 0.891f) { std::cerr << "limiter test not hot enough (off peak " << off << ")\n"; return 1; }
+        if (on > 1.0f) { std::cerr << "limiter failed to clamp (on peak " << on << ")\n"; return 1; }
+        if (on >= off) { std::cerr << "limiter did not reduce the peak\n"; return 1; }
+    }
+
     if (argc > 1 && juce::String (argv[1]) == "--bench")
     {
         // Deterministic CPU benchmark: 8 voices, evolution on, no FX.

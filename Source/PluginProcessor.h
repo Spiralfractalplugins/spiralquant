@@ -77,6 +77,12 @@ private:
         std::atomic<float>* chordSuperpose;
         std::atomic<float>* jumpRate;
         std::atomic<float>* frftAngle;
+        std::atomic<float>* memoryAmt;
+        std::atomic<float>* memoryTime;
+        std::atomic<float>* ringdown;
+        std::atomic<float>* walkOn;
+        std::atomic<float>* walkRate;
+        std::atomic<float>* limiter;
     };
 
     ParamCache makeParamCache() const;

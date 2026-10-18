@@ -54,7 +54,7 @@ private:
     juce::ComboBox skinCombo;
 
     juce::TextButton waveTypeChip, potentialTypeChip;
-    juce::ToggleButton showFFT, applyQm, chordChip, tunnelChip, superposeChip;
+    juce::ToggleButton showFFT, applyQm, chordChip, tunnelChip, superposeChip, walkChip, limiterChip;
     juce::ComboBox sampleMode, fxType, fxSolo, chordType;
 
     std::vector<Knob> knobs;
@@ -63,7 +63,7 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> sampleModeAtt, fxTypeAtt,
         fxSoloAtt, chordTypeAtt, uiSkinAtt;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> showFFTAtt, applyQmAtt,
-        chordAtt, tunnelAtt, superposeAtt;
+        chordAtt, tunnelAtt, superposeAtt, walkAtt, limiterAtt;
 
     // Base-grid rectangles (design units; every bound goes through scaled()).
     static const juce::Rectangle<int> headerArea, canvasArea, adsrArea, harmonyArea,

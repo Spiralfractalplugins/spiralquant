@@ -95,13 +95,17 @@ PluginEditor::PluginEditor (PluginProcessor& p)
     chordChip.setButtonText ("CHORD");
     tunnelChip.setButtonText ("TUNNEL");
     superposeChip.setButtonText ("SUPERPOSE");
-    for (auto* b : { &showFFT, &applyQm, &chordChip, &tunnelChip, &superposeChip })
+    walkChip.setButtonText ("WALK");
+    limiterChip.setButtonText ("LIMIT");
+    for (auto* b : { &showFFT, &applyQm, &chordChip, &tunnelChip, &superposeChip, &walkChip, &limiterChip })
         addAndMakeVisible (*b);
     showFFT.setTooltip ("Freeze evolution and read the momentum-domain (FFT) wave.");
     applyQm.setTooltip ("Master switch for real-time Schrodinger evolution. Off freezes the wave.");
     chordChip.setTooltip ("Play harmonically tuned chords from every single note.");
     tunnelChip.setTooltip ("Quantum tunneling: the wavefunction leaks through potential barriers.");
     superposeChip.setTooltip ("Chord superposition: each note holds two voicings at once; note-off measures (collapses) it to one.");
+    walkChip.setTooltip ("Quantum random walk: the engine composes its own melody, measuring a Hadamard walk over pentatonic degrees at every tick.");
+    limiterChip.setTooltip ("Output limiter: pulls peaks above -1 dBFS down with a fast attack and slow release, so chords and drive can never spike the volume.");
 
     sampleMode.addItemList ({ "Real","Imag","Magnitude","Phase","PhononQND" }, 1);
     fxType.addItemList ({ "Off","Flanger","Phaser","Bitcrush","Fractal" }, 1);
@@ -132,7 +136,10 @@ PluginEditor::PluginEditor (PluginProcessor& p)
         { Group::Potential, {
             { "potentialShift",  "CENTER", "Where the potential sits.", percent },
             { "potentialScale",  "WIDTH",  "Barrier width / curvature.", percent },
-            { "potentialHeight", "HEIGHT", "Barrier depth.", percent } } },
+            { "potentialHeight", "HEIGHT", "Barrier depth.", percent },
+            { "memoryAmt",   "MEMORY", "Non-Markovian self-coupling: the wave feels its own density from LAG ago.", percent },
+            { "memoryTime",  "LAG",    "Delay tau of the resonator memory.", msText },
+            { "ringdown",    "RING",   "Cavity ringdown: phonon loss fades the readout with a T1 tail.", percent } } },
         { Group::Env, {
             { "attack",  "ATTACK",  "Time to full amplitude in ms.", msText },
             { "decay",   "DECAY",   "Time to the sustain level in ms.", msText },
@@ -152,7 +159,8 @@ PluginEditor::PluginEditor (PluginProcessor& p)
             { "fxBits",     "BITS",   "Bitcrush quantisation depth.", bitsText },
             { "fxEntropy",  "CHAOS",  "Fractal entropy of the chaos effect.", percent } } },
         { Group::Harmony, {
-            { "pitchShift", "PITCH",  "Global transposition in cents (100 = one semitone), applied as 2^(cents/1200).", centsText } } },
+            { "pitchShift", "PITCH",  "Global transposition in cents (100 = one semitone), applied as 2^(cents/1200).", centsText },
+            { "walkRate",   "RATE",   "Quantum-walk measurement ticks per second.", rateText } } },
     };
 
     for (const auto& g : groups)
@@ -164,6 +172,8 @@ PluginEditor::PluginEditor (PluginProcessor& p)
     chordAtt    = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (processor.apvts, "chordMode", chordChip);
     superposeAtt = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (processor.apvts, "chordSuperpose", superposeChip);
     tunnelAtt   = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (processor.apvts, "tunnel", tunnelChip);
+    walkAtt     = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (processor.apvts, "walkOn", walkChip);
+    limiterAtt  = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (processor.apvts, "limiter", limiterChip);
     sampleModeAtt = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (processor.apvts, "sampleMode", sampleMode);
     fxTypeAtt     = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (processor.apvts, "fxType", fxType);
     fxSoloAtt     = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (processor.apvts, "fxSolo", fxSolo);
@@ -286,13 +296,14 @@ void PluginEditor::resized()
     layoutPanel (potArea, true, [this] (juce::Rectangle<int> r) {
         potentialTypeChip.setBounds (r.removeFromLeft (juce::jmin (r.getWidth() - 120, (int) (160 * uiScale))).reduced (2));
         tunnelChip.setBounds (r.removeFromRight ((int) (92 * uiScale)).reduced (2));
-    }, { "potentialShift", "potentialScale", "potentialHeight" });
+    }, { "potentialShift", "potentialScale", "potentialHeight", "memoryAmt", "memoryTime", "ringdown" });
 
     layoutPanel (envArea, false, nullptr, { "attack", "decay", "sustain", "release" });
     layoutPanel (filterArea, false, nullptr, { "filterFreq", "filterRes", "drive", "satMix", "gain" });
 
     layoutPanel (fxArea, true, [this] (juce::Rectangle<int> r) {
         fxType.setBounds (r.removeFromLeft ((int) (130 * uiScale)).reduced (2));
+        limiterChip.setBounds (r.removeFromRight ((int) (72 * uiScale)).reduced (2));
         fxSolo.setBounds (r.removeFromRight ((int) (100 * uiScale)).reduced (2));
     }, { "fxDepth", "fxRate", "fxFeedback", "fxMix", "fxBits", "fxEntropy" });
 
@@ -303,11 +314,16 @@ void PluginEditor::resized()
         chordChip.setBounds (h.removeFromLeft ((int) (76 * uiScale)).reduced (2));
         chordType.setBounds (h.removeFromLeft ((int) (140 * uiScale)).reduced (2));
         superposeChip.setBounds (h.removeFromLeft ((int) (112 * uiScale)).reduced (2));
-        auto knobCell = h.withWidth (juce::jmin (h.getWidth(), (int) (90 * uiScale)));
-        if (knobCell.getWidth() >= (int) (50 * uiScale))
-            for (const auto& k : knobs)
-                if (k.id == "pitchShift")
-                    layoutKnob (k, knobCell);
+        walkChip.setBounds (h.removeFromLeft ((int) (70 * uiScale)).reduced (2));
+        for (const char* id : { "pitchShift", "walkRate" })
+        {
+            auto knobCell = h.withWidth (juce::jmin (h.getWidth(), (int) (90 * uiScale)));
+            if (knobCell.getWidth() >= (int) (50 * uiScale))
+                for (const auto& k : knobs)
+                    if (k.id == id)
+                        layoutKnob (k, knobCell);
+            h.removeFromLeft (knobCell.getWidth() + (int) (6 * uiScale));
+        }
     }
 
     setGroupAlpha();
@@ -341,7 +357,9 @@ void PluginEditor::applySkin()
     tunnelChip.setColour (juce::ToggleButton::tickColourId, accentFor (Group::Potential));
     chordChip.setColour (juce::ToggleButton::tickColourId, accentFor (Group::Harmony));
     superposeChip.setColour (juce::ToggleButton::tickColourId, accentFor (Group::Harmony));
-    for (auto* b : { &showFFT, &applyQm, &tunnelChip, &chordChip, &superposeChip })
+    walkChip.setColour (juce::ToggleButton::tickColourId, accentFor (Group::Harmony));
+    limiterChip.setColour (juce::ToggleButton::tickColourId, accentFor (Group::Fx));
+    for (auto* b : { &showFFT, &applyQm, &tunnelChip, &chordChip, &superposeChip, &walkChip, &limiterChip })
         b->setColour (juce::ToggleButton::textColourId, pal.text);
 
     for (auto& k : knobs)

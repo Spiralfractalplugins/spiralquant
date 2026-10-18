@@ -25,7 +25,9 @@ void AdsrCanvas::updateHandles (float w, float h)
     const float sustainLevel = getRaw ("sustain");
     const float releaseNorm = (getRaw ("release") - 1.0f) / 4999.0f;
 
-    const float attackX = 0.16f * w + attackNorm * 0.16f * w;
+    // Attack starts at the envelope origin so attack=0 renders a vertical edge.
+    const float originX = 0.05f * w;
+    const float attackX = originX + attackNorm * 0.20f * w;
     const float decayX  = attackX + 0.10f * w + decayNorm * 0.20f * w;
     const float sustainY = h - sustainLevel * (h * 0.72f) - h * 0.12f;
     const float releaseX = decayX + 0.12f * w + releaseNorm * 0.30f * w;
@@ -135,7 +137,7 @@ void AdsrCanvas::mouseDrag (const juce::MouseEvent& e)
     {
         case Attack:
         {
-            const float aNorm = juce::jlimit (0.0f, 1.0f, (e.position.x - 0.16f * w) / (0.16f * w));
+            const float aNorm = juce::jlimit (0.0f, 1.0f, (e.position.x - 0.05f * w) / (0.20f * w));
             setRaw ("attack", 1.0f + aNorm * 1999.0f, 1.0f, 2000.0f);
             break;
         }

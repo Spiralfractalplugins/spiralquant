@@ -55,12 +55,12 @@
 |                              |  POTENTIAL                    |
 |   ADSR (тяните ручки)        |  чипы: POT, TUNNEL            |
 |                              |  ручки: CENTER WIDTH HEIGHT   |
+|                              |    MEMORY LAG RING            |
 +------------------------------+-------------------------------+
 | HARMONY: чипы CHORD,         |  ENVELOPE: A D S R            |
-| SUPERPOSE, тип аккорда,      |  FILTER & DRIVE: CUTOFF RESO  |
-| ручка PITCH                  |    DRIVE SAT GAIN             |
-|                              |    DRIVE SAT GAIN             |
-|                              |  MASTER FX: тип/solo +        |
+| SUPERPOSE, WALK, тип аккорда,|  FILTER & DRIVE: CUTOFF RESO  |
+| ручки PITCH и RATE           |    DRIVE SAT GAIN             |
+|                              |  MASTER FX: тип/solo/LIMIT +  |
 |                              |    DEPTH RATE FDBK MIX BITS   |
 |                              |    CHAOS                      |
 +------------------------------+-------------------------------+
@@ -131,6 +131,11 @@ velocity; частота ноты плавно скользит (glide) к це�
 | CHAOS | Фрактальная энтропия хаос-эффекта |
 
 **Solo**: Full / только Dry / только Wet выход.
+
+- **LIMIT**: лимитер мастера-выхода (включён по умолчанию). Стерео-связанный
+  brickwall чуть ниже полного уровня: сорвавшиеся аккорды и пики drive
+  прижимаются быстрой атакой и медленным релизом, выход гарантированно
+  не выходит за ±1. Выключен = незащищённый сигнал (возможен клиппинг).
 
 ### Полоса HARMONY
 

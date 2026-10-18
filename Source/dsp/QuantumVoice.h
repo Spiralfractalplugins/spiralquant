@@ -24,7 +24,8 @@ public:
                     int waveType, float waveShift, float waveScale, float waveImpulse,
                     int potentialType, float potentialShift, float potentialScale, float potentialHeight,
                     int showFFT, int sampleMode, float timestepDelta, float samplesPerTimestep, bool applyWavefunction,
-                    float pitchCents = 0.0f, bool tunnel = false, float jumpRate = 0.0f, float quadrature = 0.0f);
+                    float pitchCents = 0.0f, bool tunnel = false, float jumpRate = 0.0f, float quadrature = 0.0f,
+                    float memoryAmt = 0.0f, float memoryTimeMs = 80.0f, float ringdown = 0.0f);
 
     void fillScope (float* dest, int maxN) const;
     void fillScopeMomentum (float* dest, int maxN) const;
@@ -79,6 +80,7 @@ private:
         int sf, smode; float td, spt;
         bool apply; float cents; bool tunnel;
         float jr, qd;
+        float mem, memT, rd;
 
         bool operator== (const LastInputs& o) const
         {
@@ -88,7 +90,8 @@ private:
                 && pt == o.pt && ps == o.ps && psc == o.psc && ph == o.ph
                 && sf == o.sf && smode == o.smode && td == o.td && spt == o.spt
                 && apply == o.apply && cents == o.cents && tunnel == o.tunnel
-                && jr == o.jr && qd == o.qd;
+                && jr == o.jr && qd == o.qd
+                && mem == o.mem && memT == o.memT && rd == o.rd;
         }
     };
     LastInputs last {};

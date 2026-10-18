@@ -84,6 +84,12 @@ a split-step Fourier method on a 128-point grid.
 | `chordSuperpose`     | bool     | — (chords in quantum superposition)           | false   |
 | `jumpRate`           | float    | 0.0 – 1.0 (phonon-collapse rate)              | 0.0     |
 | `frftAngle`          | float    | 0.0 – 1.0 (quadrature rotation x↔k)           | 0.0     |
+| `memoryAmt`          | float    | 0.0 – 1.0 (resonator memory depth)            | 0.0     |
+| `memoryTime`         | float    | 5 – 2000 ms (memory delay)                    | 80      |
+| `ringdown`           | float    | 0.0 – 1.0 (cavity decay rate)                 | 0.0     |
+| `walkOn`             | bool     | — (quantum-walk melody generator)             | false   |
+| `walkRate`           | float    | 0.25 – 8 Hz (walk measurement ticks)          | 2.0     |
+| `limiter`            | bool     | — (master output limiter)                     | true    |
 
 Parameters are stored in an `AudioProcessorValueTreeState`, so host automation and
 state save/restore are supported.
@@ -159,6 +165,37 @@ sin²φ by a random phase φ. The note rings in a superposition of both voicings
 you release it: note-off is a *measurement* that collapses to one winner (prob.
 cos²φ) — the loser is killed instantly, the winner releases normally — so the same
 note can resolve to different harmony each take.
+
+**Resonator memory (`memoryAmt` / `memoryTime`).** A real cavity does not react to
+the wave instantaneously: its refractive index follows the *past* density. The
+oscillator keeps a delayed copy of |ψ|² in a two-slot ring buffer (pushed every
+`memoryTime` ms of evolution time) and each step applies a Kerr-like cross-phase
+modulation `ψ → ψ·e^(i·dt·6·memoryAmt·|ψ_delayed|²)`. The self-interaction lags,
+so fast shapes smear into echoes and slow chirps instead of ringing clean. 0 is
+pure instantaneous Schrödinger evolution; the effect is entirely in the phase,
+so `frftAngle`>0 makes it audible in the readout too.
+
+**Cavity ringdown (`ringdown`).** Photons leak out of the resonator at rate T₁⁻¹,
+so each evolution step decays an internal envelope `damp` and the readout is
+scaled by it — notes fade with a cavity-shaped exponential tail even after the
+ADSR has released. The wavefunction *shape* stays normalised (only the readout
+is scaled), so evolution remains unitary; 0 = perfectly reflecting cavity.
+
+**Quantum-walk melody (`walkOn` / `walkRate`).** A continuous-time quantum walk
+runs on a 16-node ring tuned to a two-octave pentatonic scale: the engine holds a
+16-amplitude state |ψ_walk⟩, spreads it Hadamard-style to the neighbours every
+tick (`walkRate` Hz) and *measures* the walker's position — the sampled node is
+played as a note with velocity ∝ detection probability. Where a random walk
+diffuses, the walk's interference keeps returning the melody to its start, so
+lines loop, cluster and suddenly leap an octave. Fully deterministic given the
+engine's own RNG stream; switch it off and the walk's voice releases cleanly.
+
+**Output limiter (`limiter`).** On by default: a stereo-linked brickwall just
+under full scale sits at the very end of the master bus. Quiet blocks skip it
+entirely (one vectorized block-peak check); when a chord or drive spike pushes
+a block over the threshold, gain is pulled down with a ~1 ms attack and an
+~80 ms release, and a final clamp guarantees the output never leaves [−1, +1].
+Switch the LIMIT chip off for unprotected (potentially clipping) output.
 
 **6. Master section.** Up to 8 voices are summed, then a master effect
 (Flanger/Phaser via JUCE, or custom Bitcrush/Fractal-chaos) with dry/wet solo,

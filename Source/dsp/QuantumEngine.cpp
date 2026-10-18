@@ -4,6 +4,9 @@ void QuantumEngine::prepare (double sampleRateHz)
 {
     sampleRate = sampleRateHz <= 0.0 ? 48000.0 : sampleRateHz;
     fx.prepare (sampleRate);
+    limAttack = 1.0f - (float) std::exp (-1.0 / (0.001 * sampleRate));
+    limRelease = 1.0f - (float) std::exp (-1.0 / (0.08 * sampleRate));
+    limGain = 1.0f;
     for (int i = 0; i < MAX_VOICES; ++i)
     {
         voices[i].prepare (sampleRate);
@@ -29,22 +32,41 @@ void QuantumEngine::reset()
     }
     for (auto& sp : supers)
         sp.note = -1;
+    walkPlaying = -1;
 }
 void QuantumEngine::setParams (float attack, float decay, float sustain, float release,
                     float filterFreq, float filterRes, float drive, float satMix, float gain,
                     int waveType, float waveShift, float waveScale, float waveImpulse,
                     int potentialType, float potentialShift, float potentialScale, float potentialHeight,
                     int showFFT, int sampleMode, float timestepDelta, float samplesPerTimestep, bool applyWavefunction,
-                    int chordModeSel, int chordTypeSel, float pitchCents, bool tunnel, float jumpRate, float quadrature)
+                    int chordModeSel, int chordTypeSel, float pitchCents, bool tunnel, float jumpRate, float quadrature,
+                    float memoryAmt, float memoryTimeMs, float ringdown, bool walkOnSel, float walkRateHz, bool limiter)
 {
     chordMode = juce::jlimit (0, 2, chordModeSel);
     chordType = juce::jlimit (0, 7, chordTypeSel);
+    limiterOn = limiter;
+
+    if (walkOnSel && ! walkOn)
+        resetWalk();
+    if (! walkOnSel && walkOn && walkPlaying >= 0)
+    {
+        handleNoteOff (walkPlaying);
+        walkPlaying = -1;
+    }
+    walkOn = walkOnSel;
+
     for (int i = 0; i < MAX_VOICES; ++i)
         voices[i].setParams (attack, decay, sustain, release, filterFreq, filterRes, drive, satMix, gain,
                              waveType, waveShift, waveScale, waveImpulse,
                              potentialType, potentialShift, potentialScale, potentialHeight,
                              showFFT, sampleMode, timestepDelta, samplesPerTimestep, applyWavefunction,
-                             pitchCents, tunnel, jumpRate, quadrature);
+                             pitchCents, tunnel, jumpRate, quadrature,
+                             memoryAmt, memoryTimeMs, ringdown);
+    if (walkRateHz != cachedWalkRate)
+    {
+        cachedWalkRate = walkRateHz;
+        walkTickSamples = juce::jmax (1, juce::roundToInt (sampleRate / juce::jlimit (0.25f, 8.0f, walkRateHz)));
+    }
 }
 
 // Chord degrees as just-intonation ratios. Consonant chords use small
@@ -167,6 +189,94 @@ void QuantumEngine::handleNoteOff (int note)
     }
 }
 
+void QuantumEngine::resetWalk()
+{
+    for (auto& a : walkPsi)
+        a = std::complex<float> (0.0f, 0.0f);
+    walkPsi[0] = std::complex<float> (1.0f, 0.0f);
+    walkCountdown = 0;
+    if (walkTickSamples <= 0)
+        walkTickSamples = juce::jmax (1, juce::roundToInt (sampleRate / 2.0f));
+}
+
+void QuantumEngine::stepWalk()
+{
+    // One ring-graph spread of the walk, then a position "measurement" picks
+    // the note with probability |a_i|^2 (pentatonic minor lattice from C3).
+    static const int offsets[16] = { 0, 3, 5, 7, 10, 12, 15, 17, 19, 22, 24, 27, 29, 31, 34, 36 };
+    std::complex<float> next[16];
+    const std::complex<float> iu (0.0f, -0.70710678f);
+    for (int i = 0; i < 16; ++i)
+        next[i] = walkPsi[i] * 0.70710678f
+                + (walkPsi[(i + 15) & 15] + walkPsi[(i + 1) & 15]) * iu;
+
+    float s2 = 0.0f;
+    for (int i = 0; i < 16; ++i) s2 += std::norm (next[i]);
+    s2 = 1.0f / std::sqrt (std::max (1.0e-12f, s2));
+    float prob[16];
+    for (int i = 0; i < 16; ++i) { next[i] *= s2; prob[i] = std::norm (next[i]); }
+    for (int i = 0; i < 16; ++i) walkPsi[i] = next[i];
+
+    std::uniform_real_distribution<float> uni (0.0f, 1.0f);
+    const float target = uni (rng);
+    float acc = 0.0f;
+    int pick = 15;
+    for (int i = 0; i < 16; ++i)
+    {
+        acc += prob[i];
+        if (target <= acc) { pick = i; break; }
+    }
+
+    const int note = 48 + offsets[pick];
+    const int vel = juce::jlimit (35, 120, juce::roundToInt (35.0f + 85.0f * prob[pick] * 16.0f));
+    if (walkPlaying >= 0) handleNoteOff (walkPlaying);
+    handleNoteOn (note, vel);
+    walkPlaying = note;
+}
+
+void QuantumEngine::applyLimiter (juce::AudioBuffer<float>& buffer)
+{
+    // Brickwall just under full scale: ordinary playing levels never touch the
+    // limiter (fast path skips the sample loop); runaway spikes are pulled
+    // down with a 1 ms attack / 80 ms release, and the clamp guarantees the
+    // output stays inside [-1, 1] during the attack ramp.
+    static constexpr float threshold = 0.98f;
+    const int n = buffer.getNumSamples();
+    const int nc = buffer.getNumChannels();
+    float* const* ch = buffer.getArrayOfWritePointers();
+
+    float peak = 0.0f;
+    for (int c = 0; c < nc; ++c)
+    {
+        const auto mm = juce::FloatVectorOperations::findMinAndMax (ch[c], n);
+        peak = juce::jmax (peak, juce::jmax (std::abs (mm.getStart()), std::abs (mm.getEnd())));
+    }
+    if (peak <= threshold && limGain >= 0.9995f)
+    {
+        limGain = 1.0f; // released: re-arm the skip path exactly
+        return;
+    }
+
+    const bool hot = peak > threshold;
+    for (int i = 0; i < n; ++i)
+    {
+        if (hot)
+        {
+            float sp = 0.0f;
+            for (int c = 0; c < nc; ++c)
+                sp = juce::jmax (sp, std::abs (ch[c][i]));
+            const float target = sp > threshold ? threshold / sp : 1.0f;
+            limGain += (target - limGain) * (target < limGain ? limAttack : limRelease);
+        }
+        else
+        {
+            limGain += (1.0f - limGain) * limRelease;
+        }
+        for (int c = 0; c < nc; ++c)
+            ch[c][i] = juce::jlimit (-1.0f, 1.0f, ch[c][i] * limGain);
+    }
+}
+
 void QuantumEngine::process (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi, bool running)
 {
     const int numSamples = buffer.getNumSamples();
@@ -179,6 +289,20 @@ void QuantumEngine::process (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&
         else if (msg.isNoteOff()) handleNoteOff (msg.getNoteNumber());
     }
     midi.clear();
+
+    if (walkOn && running)
+    {
+        walkCountdown -= numSamples;
+        while (walkCountdown <= 0)
+        {
+            walkCountdown += walkTickSamples;
+            stepWalk();
+        }
+    }
+    else if (walkCountdown < 0)
+    {
+        walkCountdown = 0;
+    }
 
     float* ch0 = (numChannels > 0) ? buffer.getWritePointer (0) : nullptr;
     if (running && ch0 != nullptr)
@@ -214,6 +338,9 @@ void QuantumEngine::process (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&
 
     if (running)
         fx.process (buffer);
+
+    if (running && limiterOn)
+        applyLimiter (buffer);
 
     if (! running)
         uiNote.store (-1, std::memory_order_relaxed);

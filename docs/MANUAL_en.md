@@ -54,12 +54,12 @@ Run `SpiralQuant.app` (or the Windows/Linux executable) directly — no host nee
 |                              |  POTENTIAL                    |
 |   ADSR editor (drag handles) |  chips: POT, TUNNEL           |
 |                              |  knobs: CENTER WIDTH HEIGHT   |
+|                              |    MEMORY LAG RING            |
 +------------------------------+-------------------------------+
-| HARMONY: CHORD, SUPERPOSE    |  ENVELOPE: A D S R            |
-| chip, chord type combo,      |  FILTER & DRIVE: CUTOFF RESO  |
-| PITCH knob                   |    DRIVE SAT GAIN             |
-|                              |    DRIVE SAT GAIN             |
-|                              |  MASTER FX: type/solo +       |
+| HARMONY: CHORD, SUPERPOSE,   |  ENVELOPE: A D S R            |
+| WALK chips, chord type combo,|  FILTER & DRIVE: CUTOFF RESO  |
+| PITCH + RATE knobs           |    DRIVE SAT GAIN             |
+|                              |  MASTER FX: type/solo/LIMIT + |
 |                              |    DEPTH RATE FDBK MIX BITS   |
 |                              |    CHAOS                      |
 +------------------------------+-------------------------------+
@@ -104,6 +104,9 @@ Run `SpiralQuant.app` (or the Windows/Linux executable) directly — no host nee
 |---|---|
 | **POT** chip | The "box": Flat, Harmonic, InfiniteWell, Barrier, DoubleWell, Linear. Determines how the wave accelerates, reflects and interferes. |
 | **CENTER / WIDTH / HEIGHT** | Position, scale and depth of the potential. HEIGHT also sets the barrier wall threshold. |
+| **MEMORY** (`memoryAmt`) | Resonator memory depth. The cavity's response lags: ψ self-phase-modulates by the *delayed* density |ψ(t−τ)|² (Kerr-like, phase-only). Smears shapes into echoes and chirps. 0 = instantaneous, textbook Schrödinger. |
+| **LAG** (`memoryTime`) | How far back the memory reaches, 5–2000 ms of evolution time. Short = slapback; long = smeared reverberant feedback. |
+| **RING** (`ringdown`) | Cavity T₁ leak: each step decays an internal envelope so notes fade with an exponential cavity tail even after release. The wave's *shape* stays normalised — only the readout shrinks. 0 = perfect mirrors. |
 | **TUNNEL** | Gamow tunnelling `T = exp(−2κL)`: the wave leaks through barriers instead of hard-reflecting. Long, shimmering tails. |
 
 ### ENVELOPE panel
@@ -132,6 +135,10 @@ Fractal. When Off, the whole section dims and is bypassed.
 
 **Solo** selects Full / Dry-only / Wet-only output.
 
+- **LIMIT**: master output limiter (on by default). Stereo-linked brickwall just
+  under full scale: runaway chord/drive spikes are pulled down with a fast attack
+  and slow release, and the output can never leave ±1. Off = unprotected signal.
+
 ### HARMONY strip
 
 - **CHORD**: one key triggers a just-intonation voicing. Consonant sets
@@ -143,6 +150,14 @@ Fractal. When Off, the whole section dims and is bypassed.
   collapses to one winner (probability cos²φ) and kills the loser, so the same note
   can resolve to a different harmony on every take. Off = the single selected voicing.
 - **PITCH**: global transpose ±2400 cents, applied as 2^(cents/1200).
+- **WALK**: the plugin composes its own melody. A continuous-time quantum walk
+  runs on a 16-node ring (two-octave pentatonic); each measurement tick the
+  walker's position — sampled with Born probabilities — becomes a note, velocity
+  ∝ detection probability. Interference makes lines return to the start instead
+  of diffusing away. Deterministic per instance; turns the walk voice off
+  cleanly when switched down.
+- **RATE**: walk measurement ticks per second (0.25–8 Hz) — how often a new
+  note is sampled from the walker.
 
 ---
 

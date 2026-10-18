@@ -37,6 +37,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Release packaging: `scripts/make_dist.sh` bundles VST3/AU/Standalone + docs
   into versioned, zipped distributions under `dist/`.
 - Parseval/finiteness assertion for scope snapshots in the render test suite.
+- Non-Markovian resonator memory (`memoryAmt`/`memoryTime`): delayed |ψ|²
+  Kerr-like self-phase modulation through a two-slot density ring buffer —
+  lagged echoes and slow chirps instead of clean ringing.
+- Cavity ringdown (`ringdown`): T₁-shaped decay applied to the readout only,
+  so notes leak out of the "cavity" with an exponential tail while ψ stays
+  normalised and evolution remains unitary.
+- Continuous-time quantum-walk melody generator (`walkOn`/`walkRate`): a
+  16-node pentatonic ring walked Hadamard-style, position measured per tick
+  with Born probabilities — the plugin composes its own self-returning lines.
+- ADSR graph: attack edge is truly vertical at attack = 0 (curve and drag
+  handle both start at the envelope origin).
+- Master output limiter (`limiter`, LIMIT chip, on by default): stereo-linked
+  brickwall just under full scale after the FX — fast attack, 80 ms release,
+  hard ±1 clamp; quiet blocks skip processing via a vectorized block-peak test.
 
 ### Changed
 - `applyWavefunction` (QM toggle) now freezes wavefunction evolution when off
