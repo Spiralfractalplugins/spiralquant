@@ -327,6 +327,36 @@ void QuantumEngine::process (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&
                 sample += voices[activeIdx[k]].process (nullptr);
             ch0[i] = sample;
         }
+
+        // EPR: a quantum jump on one voice instantly collapses its entangled
+        // partners (voices sharing the same MIDI note, e.g. superposition
+        // variants). collapseNow() never re-arms the flag, so no cascade.
+        if (entangleOn && jumpRateAmt > 0.0f && nActive > 1)
+        {
+            bool jumped[MAX_VOICES] {};
+            int notes[MAX_VOICES], nJumped = 0;
+            for (int k = 0; k < nActive; ++k)
+            {
+                const int v = activeIdx[k];
+                if (voices[v].jumpedRecently())
+                {
+                    jumped[v] = true;
+                    notes[nJumped++] = voiceNote[v];
+                }
+            }
+            if (nJumped > 0)
+                for (int k = 0; k < nActive; ++k)
+                {
+                    const int v = activeIdx[k];
+                    if (jumped[v]) continue;
+                    for (int j = 0; j < nJumped; ++j)
+                        if (voiceNote[v] == notes[j])
+                        {
+                            voices[v].forceCollapse();
+                            break;
+                        }
+                }
+        }
     }
     else if (ch0 != nullptr)
     {
