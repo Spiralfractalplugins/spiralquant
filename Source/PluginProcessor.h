@@ -33,8 +33,50 @@ public:
     juce::AudioProcessorValueTreeState apvts;
     QuantumEngine engine;
 
-    const float* getScopeWave() const { return engine.getScopeWave(); }
+    void snapshotScope (float* pos, float* mom, float* pot) const { engine.snapshotScope (pos, mom, pot); }
+    unsigned getScopeSeq() const { return engine.getScopeSeq(); }
+    float getUiNoteFreqHz() const { return engine.getUiNoteFreqHz(); }
 
 private:
+    struct ParamCache
+    {
+        std::atomic<float>* waveType;
+        std::atomic<float>* waveShift;
+        std::atomic<float>* waveScale;
+        std::atomic<float>* waveImpulse;
+        std::atomic<float>* potentialType;
+        std::atomic<float>* potentialShift;
+        std::atomic<float>* potentialScale;
+        std::atomic<float>* potentialHeight;
+        std::atomic<float>* showFFT;
+        std::atomic<float>* sampleMode;
+        std::atomic<float>* timestepDelta;
+        std::atomic<float>* samplesPerTimestep;
+        std::atomic<float>* applyWavefunction;
+        std::atomic<float>* attack;
+        std::atomic<float>* decay;
+        std::atomic<float>* sustain;
+        std::atomic<float>* release;
+        std::atomic<float>* filterFreq;
+        std::atomic<float>* filterRes;
+        std::atomic<float>* drive;
+        std::atomic<float>* satMix;
+        std::atomic<float>* gain;
+        std::atomic<float>* fxType;
+        std::atomic<float>* fxDepth;
+        std::atomic<float>* fxRate;
+        std::atomic<float>* fxFeedback;
+        std::atomic<float>* fxMix;
+        std::atomic<float>* fxBits;
+        std::atomic<float>* fxEntropy;
+        std::atomic<float>* fxSolo;
+        std::atomic<float>* chordMode;
+        std::atomic<float>* chordType;
+        std::atomic<float>* pitchShift;
+        std::atomic<float>* tunnel;
+    };
+
+    ParamCache makeParamCache() const;
+    ParamCache params;
     double currentSampleRate = 48000.0;
 };

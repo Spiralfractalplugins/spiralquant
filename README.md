@@ -28,7 +28,8 @@ a split-step Fourier method on a 128-point grid.
 - **Readout modes**: Real, Imaginary, Magnitude, Phase.
 - **Per-voice envelope**: ADSR.
 - **Filter/saturation**: resonant low-pass, drive, saturation mix, master gain.
-- **Scope**: 128-point display of `|ψ|` from the first active voice.
+- **Scope**: 128-point `|ψ(x)|` plus a `|ψ(k)|` momentum spectrum with a harmonic
+  frequency grid, fed by a double-buffered snapshot of the first active voice.
 - **Chord mode**: each key triggers a just-intonation voicing — consonant chords
   (Power, Major, Minor, Sus4, Major 7th) and dissonant ones (Tritone, Cluster,
   Pythagorean); extra degrees get a velocity falloff.
@@ -55,7 +56,7 @@ a split-step Fourier method on a 128-point grid.
 | `sampleMode`         | choice   | Real / Imag / Magnitude / Phase               | 0 (Real) |
 | `timestepDelta`      | float    | 0.001 – 0.2                                   | 0.01    |
 | `samplesPerTimestep` | float    | 0.1 – 64                                      | 8       |
-| `applyWavefunction`  | bool     | —                                             | true    |
+| `applyWavefunction`  | bool     | — (off freezes evolution)                     | true    |
 | `attack`             | float    | 1 – 2000 ms                                   | 10      |
 | `decay`              | float    | 1 – 2000 ms                                   | 100     |
 | `sustain`            | float    | 0.0 – 1.0                                     | 0.8     |
@@ -76,6 +77,7 @@ a split-step Fourier method on a 128-point grid.
 | `chordType`          | choice   | Power / Major / Minor / Sus4 / Major7 / Tritone / Cluster / Pythagorean | 1 (Major) |
 | `pitchShift`         | float    | -2400 – +2400 cents                           | 0       |
 | `tunnel`             | bool     | —                                             | false   |
+| `uiSkin`             | choice   | Dark / SciFi Neon / Console (UI only)         | 0 (Dark) |
 
 Parameters are stored in an `AudioProcessorValueTreeState`, so host automation and
 state save/restore are supported.
@@ -175,16 +177,12 @@ Source/
     QuantumEngine.{h,cpp}  voice pool (8 voices)
     QuantumVoice.{h,cpp}   envelope, filter, saturation
     QuantumOsc.{h,cpp}     Schrödinger wavetable
-  gui/                   look-and-feel + (legacy, not all wired) widgets
+  gui/                   palette/skins, scope canvas, ADSR editor, look-and-feel
 tests/TestRender.cpp
 vendor/JUCE/            vendored JUCE (do not edit)
 ```
 
 ## Known limitations
 
-- `applyWavefunction` is exposed and automated but the DSP currently always applies
-  evolution (the toggle is ignored).
-- The potential-type label differs between the parameter combo (`InfiniteWell`)
-  and some UI strings (`Well`).
-- `Source/gui/SequenceEditorComponent.h` and the Gate widgets are not compiled
-  into the current build; treat them as legacy/experimental.
+- When no note is held the scope shows the resting wavefunction of voice 0 rather
+  than a dedicated idle animation.

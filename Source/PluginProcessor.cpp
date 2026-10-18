@@ -62,13 +62,31 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     params.push_back (flt ("pitchShift", "Pitch Shift", -2400.0f, 2400.0f, 0.0f));
     params.push_back (bl ("tunnel", "Tunneling", false));
 
+    // UI-only (appended last: host index stability). Not read on the audio thread.
+    params.push_back (choice ("uiSkin", "UI Skin", { "Dark","SciFi Neon","Console" }, 0));
+
     return { params.begin(), params.end() };
 }
 
 PluginProcessor::PluginProcessor()
     : AudioProcessor (BusesProperties().withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
-      apvts (*this, nullptr, "Parameters", createLayout())
+      apvts (*this, nullptr, "Parameters", createLayout()),
+      params (makeParamCache())
 {
+}
+
+PluginProcessor::ParamCache PluginProcessor::makeParamCache() const
+{
+    auto r = [this] (const char* id) { return apvts.getRawParameterValue (id); };
+    return { r ("waveType"), r ("waveShift"), r ("waveScale"), r ("waveImpulse"),
+             r ("potentialType"), r ("potentialShift"), r ("potentialScale"), r ("potentialHeight"),
+             r ("showFFT"), r ("sampleMode"), r ("timestepDelta"), r ("samplesPerTimestep"),
+             r ("applyWavefunction"),
+             r ("attack"), r ("decay"), r ("sustain"), r ("release"),
+             r ("filterFreq"), r ("filterRes"), r ("drive"), r ("satMix"), r ("gain"),
+             r ("fxType"), r ("fxDepth"), r ("fxRate"), r ("fxFeedback"), r ("fxMix"),
+             r ("fxBits"), r ("fxEntropy"), r ("fxSolo"),
+             r ("chordMode"), r ("chordType"), r ("pitchShift"), r ("tunnel") };
 }
 
 void PluginProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
@@ -85,49 +103,30 @@ void PluginProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
     juce::ScopedNoDenormals noDenormals;
     buffer.clear();
 
-    auto* wt = (juce::AudioParameterChoice*) apvts.getParameter ("waveType");
-    auto* pt = (juce::AudioParameterChoice*) apvts.getParameter ("potentialType");
-    auto* sm = (juce::AudioParameterChoice*) apvts.getParameter ("sampleMode");
-
+    // Raw pointers resolved once at construction: string lookups here would cost
+    // a linear scan with String comparisons per parameter, per audio block.
     engine.setParams (
-        *apvts.getRawParameterValue ("attack"),
-        *apvts.getRawParameterValue ("decay"),
-        *apvts.getRawParameterValue ("sustain"),
-        *apvts.getRawParameterValue ("release"),
-        *apvts.getRawParameterValue ("filterFreq"),
-        *apvts.getRawParameterValue ("filterRes"),
-        *apvts.getRawParameterValue ("drive"),
-        *apvts.getRawParameterValue ("satMix"),
-        *apvts.getRawParameterValue ("gain"),
-        wt->getIndex(),
-        *apvts.getRawParameterValue ("waveShift"),
-        *apvts.getRawParameterValue ("waveScale"),
-        *apvts.getRawParameterValue ("waveImpulse"),
-        pt->getIndex(),
-        *apvts.getRawParameterValue ("potentialShift"),
-        *apvts.getRawParameterValue ("potentialScale"),
-        *apvts.getRawParameterValue ("potentialHeight"),
-        apvts.getRawParameterValue ("showFFT")->load() ? 1 : 0,
-        sm->getIndex(),
-        *apvts.getRawParameterValue ("timestepDelta"),
-        *apvts.getRawParameterValue ("samplesPerTimestep"),
-        apvts.getRawParameterValue ("applyWavefunction")->load(),
-        apvts.getRawParameterValue ("chordMode")->load(),
-        static_cast<int> (*apvts.getRawParameterValue ("chordType")),
-        *apvts.getRawParameterValue ("pitchShift"),
-        apvts.getRawParameterValue ("tunnel")->load()
-    );
+        params.attack->load(), params.decay->load(), params.sustain->load(), params.release->load(),
+        params.filterFreq->load(), params.filterRes->load(), params.drive->load(),
+        params.satMix->load(), params.gain->load(),
+        static_cast<int> (params.waveType->load()),
+        params.waveShift->load(), params.waveScale->load(), params.waveImpulse->load(),
+        static_cast<int> (params.potentialType->load()),
+        params.potentialShift->load(), params.potentialScale->load(), params.potentialHeight->load(),
+        params.showFFT->load() >= 0.5f ? 1 : 0,
+        static_cast<int> (params.sampleMode->load()),
+        params.timestepDelta->load(), params.samplesPerTimestep->load(),
+        params.applyWavefunction->load() >= 0.5f,
+        params.chordMode->load() >= 0.5f,
+        static_cast<int> (params.chordType->load()),
+        params.pitchShift->load(),
+        params.tunnel->load() >= 0.5f);
 
     engine.setFxParams (
-        static_cast<int> (*apvts.getRawParameterValue ("fxType")),
-        *apvts.getRawParameterValue ("fxDepth"),
-        *apvts.getRawParameterValue ("fxRate"),
-        *apvts.getRawParameterValue ("fxFeedback"),
-        *apvts.getRawParameterValue ("fxMix"),
-        *apvts.getRawParameterValue ("fxBits"),
-        *apvts.getRawParameterValue ("fxEntropy"),
-        static_cast<int> (*apvts.getRawParameterValue ("fxSolo"))
-    );
+        static_cast<int> (params.fxType->load()),
+        params.fxDepth->load(), params.fxRate->load(), params.fxFeedback->load(),
+        params.fxMix->load(), params.fxBits->load(), params.fxEntropy->load(),
+        static_cast<int> (params.fxSolo->load()));
 
     bool running = true;
     engine.process (buffer, midi, running);

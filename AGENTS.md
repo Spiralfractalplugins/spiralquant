@@ -15,7 +15,8 @@ The project has no commits yet; treat the working tree as the source of truth.
 - `Source/PluginEditor.{h,cpp}` — UI layout and parameter attachments.
 - `Source/dsp/` — engine (`QuantumEngine`), voice (`QuantumVoice`), oscillator
   (`QuantumOsc`).
-- `Source/gui/` — look-and-feel and widgets (not all are wired into the build).
+- `Source/gui/` — palette/skins (`Palette.h`), look-and-feel, scope canvas,
+  ADSR editor, preset browser.
 - `tests/TestRender.cpp` — golden render/state test.
 - `vendor/JUCE/` — **vendored dependency; never edit.**
 - `presets/` — JSON presets embedded at build time.
@@ -38,8 +39,12 @@ Build and run tests:
 
 ```sh
 cmake --build build --target SpiralQuantTests --config Release
-./build/SpiralQuantTests_artefacts/Release/SpiralQuantTests
+./build/SpiralQuantTests_artefacts/SpiralQuantTests          # single-config generators
+./build/SpiralQuantTests_artefacts/Release/SpiralQuantTests  # Xcode/multi-config
 ```
+
+`--bench` appended prints µs/audio-block for the 8-voice case; compare against
+~645 µs/block on Apple Silicon to catch perf regressions.
 
 Expected test output ends with `ALL TESTS PASSED`.
 
@@ -53,8 +58,13 @@ Expected test output ends with `ALL TESTS PASSED`.
   `getNextSample(phaseInc)` advances the wave if `samplesPerTimestep >= 1`.
 - Master effects live in `MasterFx` (JUCE Chorus/Phaser + custom Bitcrush/Fractal)
   and run after voice mixing in `QuantumEngine::process`.
-- Scope data is copied from the first active voice under the engine's (caller's)
-  guard; the UI polls `processor.getScopeWave()` on a 30 Hz timer.
+- Scope data is double-buffered in `QuantumEngine` (`scopePos/scopeMom/scopePot
+  [2][128]` + atomic slot/sequence flip); the UI polls
+  `processor.snapshotScope()` on a 30 Hz timer and repaints only when the
+  sequence counter changes. The reader never blocks the audio thread.
+- UI colours come from `Source/gui/Palette.h` (`Skins::current()`); skins are
+  Dark / SciFi Neon / Console, selected by the UI-only `uiSkin` APVTS param.
+  `PluginEditor` lays out a fixed 1280×920 base grid scaled by `uiScale`.
 
 ## Coding conventions
 
@@ -64,8 +74,8 @@ Expected test output ends with `ALL TESTS PASSED`.
   in `PluginEditor` consistent.
 - Tabs/spaces: follow existing file (4 spaces in most Source files).
 - Do not rename or insert parameters in the middle of `createLayout()` without
-  considering host index stability (see comment about AUv2 in
-  `PluginParameters.h`).
+  considering host index stability (AUv2 addresses params by index; new params
+  go at the end, as `uiSkin` does).
 
 ## Adding/changing parameters
 
@@ -78,12 +88,6 @@ Expected test output ends with `ALL TESTS PASSED`.
 
 ## Known pitfalls
 
-- `applyWavefunction` is plumbed through but ignored by DSP; do not document it
-  as functional unless you implement the gate.
-- Potential-type string mismatch: APVTS choice uses `InfiniteWell`; editor combo
-  uses `Well`.
-- `SequenceEditorComponent.h` / Gate widgets are legacy and not built; don't
-  assume they are usable.
 - `vendor/JUCE/` is huge; search within project Source instead.
 
 ## Safety checks

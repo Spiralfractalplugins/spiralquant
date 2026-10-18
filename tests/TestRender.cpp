@@ -152,6 +152,56 @@ int main (int argc = 1, char** argv = nullptr)
         if (rms <= 0.0f) { std::cerr << "silent chord=" << chord << " ct=" << ct << " tunnel=" << tunnel << "\n"; return 1; }
     }
 
+    // Scope snapshot: finiteness + Parseval. JUCE's forward FFT uses a fixed
+    // scaling convention, so instead of pinning the absolute ratio we assert it
+    // lands in a sane band and is identical for two different wavefunctions.
+    {
+        auto energy = [] (const float* v, int n)
+        {
+            double e = 0.0;
+            for (int i = 0; i < n; ++i) { if (! std::isfinite (v[i])) return -1.0; e += (double) v[i] * v[i]; }
+            return e;
+        };
+
+        float pos [QuantumEngine::SCOPE_SIZE], mom [QuantumEngine::SCOPE_SIZE], pot [QuantumEngine::SCOPE_SIZE];
+        double ratios [2] = { 0.0, 0.0 };
+
+        const int cfgs [2][2] = { { 0, 1 }, { 3, 4 } }; // waveType, potentialType
+        for (int c = 0; c < 2; ++c)
+        {
+            PluginProcessor proc;
+            proc.prepareToPlay (48000.0, 512);
+            proc.apvts.getParameter ("waveType")->setValueNotifyingHost ((float) cfgs[c][0] / 5.0f);
+            proc.apvts.getParameter ("potentialType")->setValueNotifyingHost ((float) cfgs[c][1] / 5.0f);
+            proc.apvts.getParameter ("samplesPerTimestep")->setValueNotifyingHost (0.2f);
+
+            juce::MidiBuffer midi, idle;
+            midi.addEvent (juce::MidiMessage::noteOn (1, 60, (juce::uint8) 100), 0);
+            juce::AudioBuffer<float> buffer (2, 512);
+            proc.processBlock (buffer, midi);
+            for (int b = 0; b < 4; ++b)
+                proc.processBlock (buffer, idle);
+
+            proc.snapshotScope (pos, mom, pot);
+            for (int i = 0; i < QuantumEngine::SCOPE_SIZE; ++i)
+                if (mom[i] < 0.0f) { std::cerr << "negative momentum bin\n"; return 1; }
+
+            const double ep = energy (pos, QuantumEngine::SCOPE_SIZE);
+            const double em = energy (mom, QuantumEngine::SCOPE_SIZE);
+            const double et = energy (pot, QuantumEngine::SCOPE_SIZE);
+            if (ep <= 0.0 || em < 0.0 || et < 0.0 || ep < 0.0 || em != em || et != et)
+            { std::cerr << "scope energy NaN/negative\n"; return 1; }
+
+            ratios[c] = em / ep;
+            if (ratios[c] < 0.1 || ratios[c] > 10.0 * QuantumEngine::SCOPE_SIZE)
+            { std::cerr << "Parseval ratio out of band: " << ratios[c] << "\n"; return 1; }
+        }
+
+        const double rel = std::abs (ratios[0] - ratios[1]) / ratios[0];
+        if (rel > 0.01)
+        { std::cerr << "Parseval ratio not state-independent: " << ratios[0] << " vs " << ratios[1] << "\n"; return 1; }
+    }
+
     if (argc > 1 && juce::String (argv[1]) == "--bench")
     {
         // Deterministic CPU benchmark: 8 voices, evolution on, no FX.

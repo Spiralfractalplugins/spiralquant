@@ -1,11 +1,21 @@
 #include "AdsrCanvas.h"
-#include "SciFiLookAndFeel.h"
+#include "Palette.h"
 
 void AdsrCanvas::setRaw (const char* id, float raw, float min, float max)
 {
     const float norm = (raw - min) / (max - min);
     if (auto* p = apvts().getParameter (id))
         p->setValueNotifyingHost (juce::jlimit (0.0f, 1.0f, norm));
+}
+
+void AdsrCanvas::timerCallback()
+{
+    const float sig = getRaw ("attack") + getRaw ("decay") * 2.0f
+                    + getRaw ("sustain") * 4.0f + getRaw ("release") * 8.0f;
+    if (sig == lastSig)
+        return;
+    lastSig = sig;
+    repaint();
 }
 
 void AdsrCanvas::updateHandles (float w, float h)
@@ -28,18 +38,17 @@ void AdsrCanvas::updateHandles (float w, float h)
 
 void AdsrCanvas::paint (juce::Graphics& g)
 {
+    const Palette& pal = Skins::current();
     const float w = (float) getWidth();
     const float h = (float) getHeight();
+    const float fs = juce::jlimit (7.0f, 12.0f, h * 0.07f);
     updateHandles (w, h);
 
-    g.fillAll (SciFiTheme::panelDeep);
-    g.setColour (SciFiTheme::strokeDim);
+    g.fillAll (pal.panelDeep);
+    g.setColour (pal.gridLine);
     for (int i = 1; i < 5; ++i)
-    {
-        const float x = w * (float) i / 5.0f;
-        g.drawVerticalLine ((int) x, 0, (int) h);
-    }
-    g.drawHorizontalLine ((int) (h * 0.5f), 0, (int) w);
+        g.drawVerticalLine ((int) (w * (float) i / 5.0f), 0, h);
+    g.drawHorizontalLine ((int) (h * 0.5f), 0, h);
 
     juce::Path env;
     env.startNewSubPath (w * 0.05f, h - h * 0.08f);
@@ -48,9 +57,19 @@ void AdsrCanvas::paint (juce::Graphics& g)
     env.lineTo (releaseH.x, decayH.y);
     env.lineTo (releaseH.x + (w - releaseH.x) * 0.35f, h - h * 0.08f);
 
-    g.setColour (SciFiTheme::neon.withAlpha (0.2f));
-    g.strokePath (env, juce::PathStrokeType (5.0f));
-    g.setColour (SciFiTheme::neon);
+    juce::Path fill (env);
+    fill.lineTo (releaseH.x + (w - releaseH.x) * 0.35f, h - h * 0.08f);
+    fill.lineTo (w * 0.05f, h - h * 0.08f);
+    fill.closeSubPath();
+    g.setColour (pal.env.withAlpha (0.10f));
+    g.fillPath (fill);
+
+    if (pal.neonGlow)
+    {
+        g.setColour (pal.env.withAlpha (0.20f));
+        g.strokePath (env, juce::PathStrokeType (5.0f));
+    }
+    g.setColour (pal.env);
     g.strokePath (env, juce::PathStrokeType (1.8f));
 
     auto drawHandle = [&] (juce::Point<float> p, juce::Colour c)
@@ -59,17 +78,33 @@ void AdsrCanvas::paint (juce::Graphics& g)
         g.fillEllipse (p.x - 9, p.y - 9, 18, 18);
         g.setColour (c);
         g.fillEllipse (p.x - 4, p.y - 4, 8, 8);
-        g.setColour (SciFiTheme::text);
+        g.setColour (pal.text);
         g.drawEllipse (p.x - 4, p.y - 4, 8, 8, 1.0f);
     };
-    drawHandle (attackH, SciFiTheme::neon);
-    drawHandle (decayH, SciFiTheme::holo);
-    drawHandle (sustainH, SciFiTheme::holo);
-    drawHandle (releaseH, SciFiTheme::amber);
+    drawHandle (attackH, pal.env);
+    drawHandle (decayH, pal.env.brighter (0.35f));
+    drawHandle (sustainH, pal.env.brighter (0.35f));
+    drawHandle (releaseH, pal.potential);
 
-    g.setColour (SciFiTheme::textDim);
-    g.setFont (juce::Font (juce::FontOptions (10.0f, juce::Font::bold)));
-    g.drawText ("ADSR: drag handles (attack / decay / sustain / release)", getLocalBounds().reduced (8, 4).removeFromTop (14),
+    auto drawValue = [&] (juce::Point<float> p, const juce::String& text, float dx)
+    {
+        g.setColour (pal.textTick);
+        g.setFont (Skins::font (fs));
+        g.drawText (text, juce::Rectangle<float> (p.x + dx - 30.0f, p.y - 7.0f, 60.0f, 14.0f),
+                    juce::Justification::centred, false);
+    };
+    drawValue (attackH, juce::String (juce::roundToInt (getRaw ("attack"))) + "ms", -2.0f);
+    drawValue (decayH, juce::String (juce::roundToInt (getRaw ("decay"))) + "ms", 26.0f);
+    drawValue (sustainH, juce::String (juce::roundToInt (getRaw ("sustain") * 100.0f)) + "%", 0.0f);
+    drawValue (releaseH, juce::String (juce::roundToInt (getRaw ("release"))) + "ms", -26.0f);
+
+    g.setColour (pal.textDim);
+    g.setFont (Skins::font (fs * 1.1f, juce::Font::bold));
+    g.drawText ("ADSR", getLocalBounds().reduced (8, 4).removeFromTop (16),
+                juce::Justification::centredLeft, false);
+    g.setColour (pal.textDim.withAlpha (0.6f));
+    g.setFont (Skins::font (fs));
+    g.drawText ("drag attack / decay / release", getLocalBounds().reduced (8, 4).removeFromTop (16).withX (w * 0.4f),
                 juce::Justification::centredLeft, false);
 }
 

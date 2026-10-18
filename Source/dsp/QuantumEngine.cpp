@@ -10,7 +10,13 @@ void QuantumEngine::prepare (double sampleRateHz)
         voiceNote[i] = -1;
         voiceAge[i] = 0;
     }
-    reset();    for (int i = 0; i < QuantumOsc::SIZE; ++i) scopeWave[i] = 0.0f;
+    reset();
+    scopeSlot.store (0);
+    scopeSeq.store (0);
+    uiNote.store (-1);
+    for (int s = 0; s < 2; ++s)
+        for (int i = 0; i < SCOPE_SIZE; ++i)
+        { scopePos[s][i] = 0.0f; scopeMom[s][i] = 0.0f; scopePot[s][i] = 0.0f; }
 }
 
 void QuantumEngine::reset()
@@ -69,6 +75,7 @@ void QuantumEngine::setFxParams (int type, float depth, float rate, float feedba
 
 void QuantumEngine::handleNoteOn (int note, int velocity)
 {
+    uiNote.store (note, std::memory_order_relaxed);
     const int degrees = chordMode ? chordSize (chordType) : 1;
     for (int d = 0; d < degrees; ++d)
     {
@@ -116,16 +123,21 @@ void QuantumEngine::process (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&
     float* ch0 = (numChannels > 0) ? buffer.getWritePointer (0) : nullptr;
     if (running && ch0 != nullptr)
     {
+        // Voice list resolved once per block; a voice that falls idle mid-block
+        // still returns silence from process(), so the sum is unchanged.
+        int activeIdx[MAX_VOICES], nActive = 0;
         for (int v = 0; v < MAX_VOICES; ++v)
             if (voices[v].isActive())
+            {
                 voices[v].prepareBlock();
+                activeIdx[nActive++] = v;
+            }
 
         for (int i = 0; i < numSamples; ++i)
         {
             float sample = 0.0f;
-            for (int v = 0; v < MAX_VOICES; ++v)
-                if (voices[v].isActive())
-                    sample += voices[v].process (nullptr);
+            for (int k = 0; k < nActive; ++k)
+                sample += voices[activeIdx[k]].process (nullptr);
             ch0[i] = sample;
         }
     }
@@ -144,12 +156,43 @@ void QuantumEngine::process (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&
         fx.process (buffer);
 
     if (! running)
-        for (int i = 0; i < QuantumOsc::SIZE; ++i) scopeWave[i] = 0.0f;
+        uiNote.store (-1, std::memory_order_relaxed);
 
-    // scope from first active voice
+    // Publish scope snapshot into the back buffer, then flip the slot so the
+    // UI can read a stable copy. Falls back to voice 0 when idle so the canvas
+    // keeps showing the resting wave/potential instead of going blank.
+    const int back = 1 - scopeSlot.load (std::memory_order_relaxed);
     int sV = -1;
     for (int v = 0; v < MAX_VOICES; ++v)
         if (voices[v].isActive()) { sV = v; break; }
-    if (sV >= 0) voices[sV].fillScope (scopeWave, QuantumOsc::SIZE);
-    else for (int i = 0; i < QuantumOsc::SIZE; ++i) scopeWave[i] = 0.0f;
+    if (sV < 0 && running)
+        sV = 0;
+    if (sV >= 0)
+    {
+        voices[sV].fillScope (scopePos[back], SCOPE_SIZE);
+        voices[sV].fillScopeMomentum (scopeMom[back], SCOPE_SIZE);
+        voices[sV].fillPotential (scopePot[back], SCOPE_SIZE);
+    }
+    else
+    {
+        for (int i = 0; i < SCOPE_SIZE; ++i)
+        { scopePos[back][i] = 0.0f; scopeMom[back][i] = 0.0f; scopePot[back][i] = 0.0f; }
+    }
+    scopeSlot.store (back, std::memory_order_release);
+    ++scopeSeq;
+}
+
+void QuantumEngine::snapshotScope (float* pos, float* mom, float* pot) const
+{
+    const int front = scopeSlot.load (std::memory_order_acquire);
+    if (pos != nullptr) std::memcpy (pos, scopePos[front], sizeof (float) * SCOPE_SIZE);
+    if (mom != nullptr) std::memcpy (mom, scopeMom[front], sizeof (float) * SCOPE_SIZE);
+    if (pot != nullptr) std::memcpy (pot, scopePot[front], sizeof (float) * SCOPE_SIZE);
+}
+
+float QuantumEngine::getUiNoteFreqHz() const
+{
+    const int note = uiNote.load (std::memory_order_relaxed);
+    if (note < 0) return -1.0f;
+    return 440.0f * std::pow (2.0f, (note - 69) / 12.0f);
 }

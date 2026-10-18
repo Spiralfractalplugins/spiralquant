@@ -1,7 +1,7 @@
 #pragma once
 #include <JuceHeader.h>
 #include "PluginProcessor.h"
-#include "gui/SciFiLookAndFeel.h"
+#include "gui/DarkLookAndFeel.h"
 #include "gui/ValueSlider.h"
 #include "gui/QuantumCanvas.h"
 #include "gui/AdsrCanvas.h"
@@ -17,30 +17,57 @@ public:
     void resized() override;
 
 private:
-    void timerCallback() override;
-    PluginProcessor& processor;
-    SciFiLookAndFeel lnf;
+    enum class Group { Wave, Potential, Env, Filter, Fx, Harmony };
+    static juce::Colour accentFor (Group);
 
-    juce::Label title;
+    struct Knob
+    {
+        juce::String id;
+        std::unique_ptr<ValueSlider> slider;
+        std::unique_ptr<juce::Label> nameLabel, valueLabel;
+        std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attachment;
+        juce::Rectangle<int> baseCell;
+        Group group;
+        juce::String lastText;
+    };
+
+    void addKnob (const char* id, const juce::String& title, const juce::String& tooltip,
+                  Group group, ValueSlider::FormatFn format);
+    void layoutKnob (const Knob& k, juce::Rectangle<int> cell);
+    juce::Rectangle<int> scaled (juce::Rectangle<int> r) const;
+    void applySkin();
+    void setGroupAlpha();
+    void timerCallback() override;
+
+    PluginProcessor& processor;
+    DarkLookAndFeel lnf;
+    float uiScale = 1.0f;
+    int originX = 0, originY = 0;
+
+    static constexpr int baseW = 1280, baseH = 920;
+
+    juce::Label title, versionLabel, status;
     LogoMark logo;
-    juce::Label versionLabel;
-    juce::Label status;
-    juce::Label presetLabel;
-    juce::ComboBox presetBox;
     QuantumCanvas canvas;
     AdsrCanvas adsrCanvas;
+    PresetBrowser presetBrowser;
+    juce::ComboBox skinCombo;
 
     juce::TextButton waveTypeChip, potentialTypeChip;
     juce::ToggleButton showFFT, applyQm, chordChip, tunnelChip;
-
-    ValueSlider filterFreq, filterRes, gain, fxMix;
-    ValueSlider timestepDelta, samplesPerTimestep, pitchShift;
     juce::ComboBox sampleMode, fxType, fxSolo, chordType;
-    PresetBrowser presetBrowser;
 
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> showFFTAtt, applyQmAtt, chordAtt, tunnelAtt;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> filterFreqAtt, filterResAtt, gainAtt, fxMixAtt, timestepAtt, evolRateAtt, pitchAtt;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> sampleModeAtt, fxTypeAtt, fxSoloAtt, chordTypeAtt;
+    std::vector<Knob> knobs;
+    std::vector<ValueSlider*> fxKnobs;
+    juce::Slider* pitchKnob = nullptr;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> sampleModeAtt, fxTypeAtt,
+        fxSoloAtt, chordTypeAtt, uiSkinAtt;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> showFFTAtt, applyQmAtt,
+        chordAtt, tunnelAtt;
+
+    // Base-grid rectangles (design units; every bound goes through scaled()).
+    static const juce::Rectangle<int> headerArea, canvasArea, adsrArea, harmonyArea,
+        waveArea, potArea, envArea, filterArea, fxArea;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PluginEditor)
 };

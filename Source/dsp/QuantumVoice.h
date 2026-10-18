@@ -25,6 +25,9 @@ public:
                     float pitchCents = 0.0f, bool tunnel = false);
 
     void fillScope (float* dest, int maxN) const;
+    void fillScopeMomentum (float* dest, int maxN) const;
+    void fillPotential (float* dest, int maxN) const;
+    int getMidiNote() const { return midiNote; }
 
 private:
     enum class State { Idle, Attack, Decay, Sustain, Release };
@@ -62,6 +65,30 @@ private:
     float releaseMul = 0.0f;
     bool coeffsDirty = true;
     float lastTimestepDelta = -1.0f;
+
+    // Raw inputs of the last setParams call: an unchanged block skips the
+    // whole reassignment, and IIR coefficients are only marked dirty when the
+    // filter pair actually moved.
+    struct LastInputs
+    {
+        float a, d, s, r, ff, fr, dr, sm, g;
+        int wt; float ws, wsc, wi;
+        int pt; float ps, psc, ph;
+        int sf, smode; float td, spt;
+        bool apply; float cents; bool tunnel;
+
+        bool operator== (const LastInputs& o) const
+        {
+            return a == o.a && d == o.d && s == o.s && r == o.r
+                && ff == o.ff && fr == o.fr && dr == o.dr && sm == o.sm && g == o.g
+                && wt == o.wt && ws == o.ws && wsc == o.wsc && wi == o.wi
+                && pt == o.pt && ps == o.ps && psc == o.psc && ph == o.ph
+                && sf == o.sf && smode == o.smode && td == o.td && spt == o.spt
+                && apply == o.apply && cents == o.cents && tunnel == o.tunnel;
+        }
+    };
+    LastInputs last {};
+    bool lastKnown = false;
 
     void updateEnvelope();
     float frequencyToPhaseInc (float freq) const;

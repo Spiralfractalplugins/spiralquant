@@ -282,7 +282,8 @@ float QuantumOsc::toReal (std::complex<float> v) const
 {
     if (sampleMode == 1) return v.imag();
     if (sampleMode == 2) return std::abs (v);
-    if (sampleMode == 3) return std::sin (std::arg (v));
+    // Identical to sin(arg(v)) but skips an atan2 plus a sine per sample.
+    if (sampleMode == 3) return v.imag () / std::max (1.0e-12f, std::abs (v));
     return v.real();
 }
 
@@ -290,4 +291,17 @@ void QuantumOsc::fillScope (float* dest, int maxN) const
 {
     const int n = juce::jmin (maxN, SIZE);
     for (int i = 0; i < n; ++i) dest[i] = std::abs (psi[i]);
+}
+
+void QuantumOsc::fillScopeMomentum (float* dest, int maxN) const
+{
+    const int n = juce::jmin (maxN, SIZE);
+    // With showFFT on, psi already holds the (normalised) momentum wavefunction.
+    for (int i = 0; i < n; ++i) dest[i] = std::abs (showFFT ? psi[i] : psiFFT[i]);
+}
+
+void QuantumOsc::fillPotential (float* dest, int maxN) const
+{
+    const int n = juce::jmin (maxN, SIZE);
+    for (int i = 0; i < n; ++i) dest[i] = potential[i];
 }

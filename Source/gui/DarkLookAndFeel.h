@@ -1,86 +1,131 @@
 #pragma once
 
 #include <JuceHeader.h>
+#include "Palette.h"
 
-namespace Theme
-{
-    inline const juce::Colour background   { 0xff181b20 };
-    inline const juce::Colour panel        { 0xff22262d };
-    inline const juce::Colour panelOutline { 0xff333a44 };
-    inline const juce::Colour text         { 0xffc8d0dc };
-    inline const juce::Colour textDim      { 0xff7a8492 };
-    inline const juce::Colour accent       { 0xffe8a03c }; // 303 amber
-    inline const juce::Colour accentAlt    { 0xff4ac8e8 }; // cyan
-    inline const juce::Colour pitch        { 0xffb06ae8 }; // violet
-    inline const juce::Colour gate         { 0xffe8564a }; // gate red
-    inline const juce::Colour gridLine     { 0xff2c313a };
-    inline const juce::Colour gridBeat     { 0xff3d4451 };
-    inline const juce::Colour knobTrack    { 0xff3a4150 };
-    inline const juce::Colour playhead     { 0xfff2f5f9 };
-
-    /** One radius for every rectangle in the UI: panels, grids, buttons, combo boxes. */
-    inline constexpr float corner = 6.0f;
-
-    /** JUCE 8 deprecated Font(height, styleFlags), so all UI text goes through here. */
-    inline juce::Font font (float height, int style = juce::Font::plain)
-    {
-        return juce::Font (juce::FontOptions (height, style));
-    }
-}
-
+/** Skin-aware look and feel: every draw method reads Skins::current() at paint
+    time, so switching skins only needs a repaint, not reconstruction. */
 class DarkLookAndFeel : public juce::LookAndFeel_V4
 {
 public:
     float uiScale = 1.0f;
 
-    DarkLookAndFeel()
+    DarkLookAndFeel() { refreshColours(); }
+
+    void refreshColours()
     {
-        setColour (juce::Slider::backgroundColourId, Theme::panel);
-        setColour (juce::Slider::trackColourId, Theme::knobTrack);
-        setColour (juce::Slider::rotarySliderFillColourId, Theme::accent);
-        setColour (juce::Slider::rotarySliderOutlineColourId, Theme::knobTrack);
-        setColour (juce::Slider::thumbColourId, Theme::text);
-        setColour (juce::Label::textColourId, Theme::text);
-        setColour (juce::TextButton::buttonColourId, Theme::panel);
-        setColour (juce::TextButton::textColourOffId, Theme::text);
-        setColour (juce::TextButton::textColourOnId, Theme::accent);
-        setColour (juce::ToggleButton::textColourId, Theme::text);
-        setColour (juce::PopupMenu::backgroundColourId, Theme::panel);
-        setColour (juce::PopupMenu::textColourId, Theme::text);
-        setColour (juce::PopupMenu::highlightedTextColourId, Theme::background);
+        const Palette& pal = Skins::current();
+        setColour (juce::Slider::backgroundColourId, pal.panel);
+        setColour (juce::Slider::trackColourId, pal.knobTrack);
+        setColour (juce::Slider::rotarySliderOutlineColourId, pal.knobTrack);
+        setColour (juce::Slider::thumbColourId, pal.text);
+        setColour (juce::Label::textColourId, pal.text);
+        setColour (juce::TextButton::buttonColourId, pal.panelDeep);
+        setColour (juce::TextButton::textColourOffId, pal.text);
+        setColour (juce::TextButton::textColourOnId, pal.accent);
+        setColour (juce::ToggleButton::textColourId, pal.text);
+        setColour (juce::ComboBox::backgroundColourId, pal.panelDeep);
+        setColour (juce::ComboBox::textColourId, pal.text);
+        setColour (juce::ComboBox::outlineColourId, pal.panelOutline);
+        setColour (juce::ComboBox::arrowColourId, pal.accent);
+        setColour (juce::PopupMenu::backgroundColourId, pal.panel);
+        setColour (juce::PopupMenu::textColourId, pal.text);
+        setColour (juce::PopupMenu::highlightedBackgroundColourId, pal.accent.withAlpha (0.25f));
+        setColour (juce::PopupMenu::highlightedTextColourId, pal.text);
+        setColour (juce::TextEditor::backgroundColourId, pal.panelDeep);
+        setColour (juce::TextEditor::textColourId, pal.text);
+        setColour (juce::TextEditor::highlightColourId, pal.accent.withAlpha (0.25f));
     }
 
     juce::Font getTextButtonFont (juce::TextButton& button, int buttonHeight) override
     {
-        return juce::LookAndFeel_V4::getTextButtonFont (button, buttonHeight).withHeight (13.0f * uiScale);
+        return juce::LookAndFeel_V4::getTextButtonFont (button, buttonHeight).withHeight (Skins::fontButton * uiScale);
     }
 
-    /** V4 hard-codes a 3 px corner here, which reads as a different shape next to every
-        other rectangle in the window. */
+    juce::Font getComboBoxFont (juce::ComboBox&) override { return Skins::font (Skins::fontBody * uiScale); }
+
+    /** V4 hard-codes a 3 px corner here, which reads as a different shape next to
+        every other rectangle in the window. */
     void drawComboBox (juce::Graphics& g, int width, int height, bool,
                        int, int, int, int, juce::ComboBox& box) override
     {
         using namespace juce;
-        const Rectangle<int> boxBounds (0, 0, width, height);
+        const Palette& pal = Skins::current();
+        const Rectangle<int> r (0, 0, width, height);
 
         g.setColour (box.findColour (ComboBox::backgroundColourId));
-        g.fillRoundedRectangle (boxBounds.toFloat(), Theme::corner);
-
+        g.fillRoundedRectangle (r.toFloat(), pal.corner);
         g.setColour (box.findColour (ComboBox::outlineColourId));
-        g.drawRoundedRectangle (boxBounds.toFloat().reduced (0.5f, 0.5f), Theme::corner, 1.0f);
+        g.drawRoundedRectangle (r.toFloat().reduced (0.5f), pal.corner, 1.0f);
+        if (box.hasKeyboardFocus (true))
+        {
+            g.setColour (pal.accent.withAlpha (0.85f));
+            g.drawRoundedRectangle (r.toFloat().reduced (0.5f).expanded (2.0f), pal.corner + 2.0f, 2.0f);
+        }
 
-        const Rectangle<int> arrowZone (width - 30, 0, 20, height);
-        Path path;
-        path.startNewSubPath (static_cast<float> (arrowZone.getX()) + 3.0f,
-                              static_cast<float> (arrowZone.getCentreY()) - 2.0f);
-        path.lineTo (static_cast<float> (arrowZone.getCentreX()),
-                     static_cast<float> (arrowZone.getCentreY()) + 3.0f);
-        path.lineTo (static_cast<float> (arrowZone.getRight()) - 3.0f,
-                     static_cast<float> (arrowZone.getCentreY()) - 2.0f);
+        const Rectangle<int> arrow (width - 24, 0, 18, height);
+        Path p;
+        p.startNewSubPath ((float) arrow.getX() + 3.0f, (float) arrow.getCentreY() - 2.0f);
+        p.lineTo ((float) arrow.getCentreX(), (float) arrow.getCentreY() + 3.0f);
+        p.lineTo ((float) arrow.getRight() - 3.0f, (float) arrow.getCentreY() - 2.0f);
+        g.setColour (box.findColour (ComboBox::arrowColourId).withAlpha (box.isEnabled() ? 0.9f : 0.2f));
+        g.strokePath (p, PathStrokeType (1.8f));
+    }
 
-        g.setColour (box.findColour (ComboBox::arrowColourId)
-                        .withAlpha (box.isEnabled() ? 0.9f : 0.2f));
-        g.strokePath (path, PathStrokeType (2.0f));
+    void drawButtonBackground (juce::Graphics& g, juce::Button& button, const juce::Colour&,
+                               bool isMouseOver, bool isButtonDown) override
+    {
+        const Palette& pal = Skins::current();
+        const auto r = button.getLocalBounds().toFloat().reduced (0.5f);
+        const bool on = button.getToggleState();
+        const juce::Colour tint = button.findColour (juce::TextButton::buttonOnColourId);
+        g.setColour (isButtonDown ? pal.panelDeep.darker (0.2f)
+                    : on ? tint
+                    : isMouseOver ? pal.panel.brighter (0.18f) : pal.panelDeep);
+        g.fillRoundedRectangle (r, pal.corner);
+        g.setColour (on || isMouseOver ? pal.accent.withAlpha (on ? 0.9f : 0.45f) : pal.panelOutline);
+        g.drawRoundedRectangle (r, pal.corner, 1.0f);
+    }
+
+    void drawToggleButton (juce::Graphics& g, juce::ToggleButton& button, bool, bool) override
+    {
+        using namespace juce;
+        const Palette& pal = Skins::current();
+        const auto r = button.getLocalBounds().toFloat().reduced (0.5f);
+        const bool on = button.getToggleState();
+        const Colour tint = button.findColour (ToggleButton::tickColourId);
+        g.setColour (on ? tint.withAlpha (0.28f) : pal.panelDeep);
+        g.fillRoundedRectangle (r, pal.corner);
+        g.setColour (on ? tint : pal.panelOutline);
+        g.drawRoundedRectangle (r, pal.corner, 1.0f);
+        if (button.hasKeyboardFocus (true))
+        {
+            g.setColour (pal.accent.withAlpha (0.85f));
+            g.drawRoundedRectangle (r.expanded (2.0f), pal.corner + 2.0f, 2.0f);
+        }
+        g.setColour (on ? pal.text : pal.textDim);
+        g.setFont (Skins::font (Skins::fontButton * uiScale, on ? Font::bold : Font::plain));
+        g.drawFittedText (button.getButtonText(), button.getLocalBounds().reduced (6, 0),
+                          Justification::centred, 1);
+    }
+
+    std::unique_ptr<juce::FocusOutline> createFocusOutlineForComponent (juce::Component&) override
+    {
+        struct Props : juce::FocusOutline::OutlineWindowProperties
+        {
+            juce::Rectangle<int> getOutlineBounds (juce::Component& focused) override
+            {
+                return focused.getScreenBounds().expanded (3);
+            }
+            void drawOutline (juce::Graphics& g, int w, int h) override
+            {
+                const Palette& pal = Skins::current();
+                g.setColour (pal.accent.withAlpha (0.9f));
+                g.drawRoundedRectangle (3.5f, 3.5f, (float) w - 7.0f, (float) h - 7.0f,
+                                        pal.corner + 3.0f, 2.0f);
+            }
+        };
+        return std::make_unique<juce::FocusOutline> (std::make_unique<Props> ());
     }
 
     void drawRotarySlider (juce::Graphics& g, int x, int y, int width, int height,
@@ -88,62 +133,79 @@ public:
                            float rotaryEndAngle, juce::Slider& slider) override
     {
         using namespace juce;
-        const float cx = static_cast<float> (x) + static_cast<float> (width) * 0.5f;
-        const float cy = static_cast<float> (y) + static_cast<float> (height) * 0.5f;
-        const float outer = jmin (static_cast<float> (width), static_cast<float> (height)) * 0.5f - 1.0f;
+        const Palette& pal = Skins::current();
+        const float cx = (float) x + (float) width * 0.5f;
+        const float cy = (float) y + (float) height * 0.5f;
+        const float outer = jmin ((float) width, (float) height) * 0.5f - 1.0f;
         const float trackR = outer - 6.0f;
         const float bodyR  = trackR - 3.5f;
-        const float norm   = static_cast<float> (juce::jlimit (0.0, 1.0, static_cast<double> (sliderPos)));
-        const float angle  = rotaryStartAngle + norm * (rotaryEndAngle - rotaryStartAngle) - MathConstants<float>::halfPi;
-        const Colour fill = slider.findColour (Slider::rotarySliderFillColourId);
+        const float norm   = jlimit (0.0f, 1.0f, sliderPos);
+        const float sweep  = rotaryEndAngle - rotaryStartAngle;
+        const float angle  = rotaryStartAngle + norm * sweep - MathConstants<float>::halfPi;
+        const Colour fill  = slider.findColour (Slider::rotarySliderFillColourId);
 
-        // tick marks
+        if (slider.hasKeyboardFocus (true))
+        {
+            g.setColour (pal.accent.withAlpha (0.22f));
+            g.fillEllipse (cx - outer - 3.0f, cy - outer - 3.0f, (outer + 3.0f) * 2.0f, (outer + 3.0f) * 2.0f);
+        }
+
+        // All sliders share the same start/sweep angles, so the 11 tick unit
+        // vectors are memoised instead of 22 trig calls per knob per frame.
+        struct TickTable { float a0 = 0.0f, sw = 0.0f; float ux[11], uy[11]; bool valid = false; };
+        static thread_local TickTable ticks;
+        if (! ticks.valid || ticks.a0 != rotaryStartAngle || ticks.sw != sweep)
+        {
+            ticks.a0 = rotaryStartAngle; ticks.sw = sweep; ticks.valid = true;
+            for (int i = 0; i <= 10; ++i)
+            {
+                const float t = rotaryStartAngle + sweep * (float) i / 10.0f - MathConstants<float>::halfPi;
+                ticks.ux[i] = std::cos (t);
+                ticks.uy[i] = std::sin (t);
+            }
+        }
+
         for (int i = 0; i <= 10; ++i)
         {
-            const float t = rotaryStartAngle + (rotaryEndAngle - rotaryStartAngle) * static_cast<float> (i) / 10.0f
-                            - MathConstants<float>::halfPi;
             const bool major = i == 0 || i == 5 || i == 10;
             const float r0 = trackR + 2.0f;
             const float r1 = major ? outer : outer - 2.0f;
-            g.setColour (static_cast<float> (i) / 10.0f <= norm + 0.001f
-                             ? fill.withAlpha (0.9f) : Theme::textDim.withAlpha (0.45f));
-            g.drawLine (cx + std::cos (t) * r0, cy + std::sin (t) * r0,
-                        cx + std::cos (t) * r1, cy + std::sin (t) * r1, major ? 1.4f : 1.0f);
+            g.setColour ((float) i / 10.0f <= norm + 0.001f
+                             ? fill.withAlpha (0.9f) : pal.textDim.withAlpha (0.45f));
+            g.drawLine (cx + ticks.ux[i] * r0, cy + ticks.uy[i] * r0,
+                        cx + ticks.ux[i] * r1, cy + ticks.uy[i] * r1, major ? 1.4f : 1.0f);
         }
 
         // Track and value arcs. Path arcs measure angles from 12 o'clock,
         // so they take the raw slider angles, unlike the cos/sin maths below.
-        const float sweep = rotaryEndAngle - rotaryStartAngle;
         Path track;
-        track.addCentredArc (cx, cy, trackR, trackR, 0.0f,
-                             rotaryStartAngle, rotaryEndAngle, true);
-        g.setColour (Theme::knobTrack);
+        track.addCentredArc (cx, cy, trackR, trackR, 0.0f, rotaryStartAngle, rotaryEndAngle, true);
+        g.setColour (pal.knobTrack);
         g.strokePath (track, PathStrokeType (3.0f, PathStrokeType::curved, PathStrokeType::rounded));
 
         if (norm > 0.002f)
         {
             Path arc;
-            arc.addCentredArc (cx, cy, trackR, trackR, 0.0f,
-                               rotaryStartAngle, rotaryStartAngle + norm * sweep, true);
+            arc.addCentredArc (cx, cy, trackR, trackR, 0.0f, rotaryStartAngle, rotaryStartAngle + norm * sweep, true);
             g.setColour (fill);
             g.strokePath (arc, PathStrokeType (3.0f, PathStrokeType::curved, PathStrokeType::rounded));
         }
 
-        // knob body
-        g.setGradientFill (ColourGradient (Colour (0xff464e5c), cx - bodyR, cy - bodyR,
-                                           Colour (0xff1b1e24), cx + bodyR, cy + bodyR, false));
+        // Knob body: fake drop shadow, then lit-corner to shadowed-corner gradient.
+        g.setColour (juce::Colour (0x60000000));
+        g.fillEllipse (cx - bodyR + 1.5f, cy - bodyR + 2.5f, bodyR * 2.0f, bodyR * 2.0f);
+        g.setGradientFill (ColourGradient (pal.knobHi, cx - bodyR, cy - bodyR,
+                                          pal.knobLo, cx + bodyR, cy + bodyR, false));
         g.fillEllipse (cx - bodyR, cy - bodyR, bodyR * 2.0f, bodyR * 2.0f);
-        g.setColour (fill.withAlpha (0.5f));
+        g.setColour (fill.withAlpha (0.45f));
         g.drawEllipse (cx - bodyR, cy - bodyR, bodyR * 2.0f, bodyR * 2.0f, 1.0f);
 
-        // short indicator near the rim
-        g.setColour (Theme::text);
-        g.drawLine (cx + std::cos (angle) * bodyR * 0.55f, cy + std::sin (angle) * bodyR * 0.55f,
-                    cx + std::cos (angle) * bodyR * 0.90f, cy + std::sin (angle) * bodyR * 0.90f, 2.5f);
+        const float c = std::cos (angle), s = std::sin (angle);
+        g.setColour (pal.text);
+        g.drawLine (cx + c * bodyR * 0.55f, cy + s * bodyR * 0.55f,
+                    cx + c * bodyR * 0.90f, cy + s * bodyR * 0.90f, 2.5f);
 
-        // dot at the arc end
         g.setColour (fill);
-        g.fillEllipse (cx + std::cos (angle) * trackR - 2.4f,
-                       cy + std::sin (angle) * trackR - 2.4f, 4.8f, 4.8f);
+        g.fillEllipse (cx + c * trackR - 2.4f, cy + s * trackR - 2.4f, 4.8f, 4.8f);
     }
 };

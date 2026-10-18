@@ -1,11 +1,15 @@
 #pragma once
 #include <JuceHeader.h>
 #include "../PluginProcessor.h"
+#include "../dsp/QuantumOsc.h"
 
+/** Split scope: top panel |psi(x)| with potential overlay and drag handles,
+    bottom panel |psi(k)| momentum spectrum with frequency grid. Both are fed
+    by the engine's double-buffered snapshot, never by analytic lookalikes. */
 class QuantumCanvas : public juce::Component, private juce::Timer
 {
 public:
-    QuantumCanvas (PluginProcessor& p) : processor (p) { startTimerHz (30); }
+    explicit QuantumCanvas (PluginProcessor& p);
     void paint (juce::Graphics& g) override;
     void mouseDown (const juce::MouseEvent& e) override;
     void mouseDrag (const juce::MouseEvent& e) override;
@@ -16,24 +20,31 @@ public:
     void cyclePotentialType();
 
 private:
-    void timerCallback() override { repaint(); }
+    void timerCallback() override;
 
     PluginProcessor& processor;
     juce::AudioProcessorValueTreeState& apvts() { return processor.apvts; }
 
-    float getRaw (const char* id) const { return *processor.apvts.getRawParameterValue (id); }
+    std::atomic<float>* raw (const char* id) const { return processor.apvts.getRawParameterValue (id); }
     void setNorm (const char* id, float norm);
 
     enum Drag { None, WaveCenter, WaveScale, PotCenter, PotHeight, PotScale };
     Drag dragging = None;
-    juce::Point<float> lastMouse;
 
     juce::Point<float> waveCenterH, waveScaleH;
     juce::Point<float> potCenterH, potHeightH, potScaleH;
+    juce::Rectangle<float> plot;   // |psi(x)| drawing area inside the wave panel
 
+    juce::Rectangle<float> wavePanel() const;
+    juce::Rectangle<float> spectrumPanel() const;
     void updateHandles();
     bool hit (juce::Point<float> p, juce::Point<float> h) const { return p.getDistanceFrom (h) <= 11.0f; }
 
     float xNormToUnit (float xNorm) const { return juce::jlimit (0.0f, 1.0f, (xNorm + 1.0f) * 0.5f); }
     float unitToXNorm (float u) const { return juce::jlimit (-1.0f, 1.0f, u * 2.0f - 1.0f); }
+
+    static constexpr int N = QuantumOsc::SIZE;
+    float scopePos[N] {}, scopeMom[N] {}, scopePot[N] {};
+    unsigned lastSeq = 0xffffffffu;
+    float lastHandleSig = -1.0f;
 };

@@ -41,6 +41,17 @@ void QuantumVoice::setParams (float a, float d, float s, float r,
                               int sf, int smode, float td, float spt, bool apply,
                               float cents, bool tunnel)
 {
+    const LastInputs in { a, d, s, r, ff, fr, dr, sm, g,
+                          wt, ws, wsc, wi,
+                          pt, ps, psc, ph,
+                          sf, smode, td, spt, apply, cents, tunnel };
+    if (lastKnown && in == last)
+        return;
+
+    coeffsDirty = ! lastKnown || ff != last.ff || fr != last.fr;
+    last = in;
+    lastKnown = true;
+
     attackMs = juce::jlimit (1.0f, 5000.0f, a);
     decayMs = juce::jlimit (1.0f, 5000.0f, d);
     sustainLevel = juce::jlimit (0.0f, 1.0f, s);
@@ -50,7 +61,6 @@ void QuantumVoice::setParams (float a, float d, float s, float r,
     drive = juce::jlimit (0.0f, 1.0f, dr);
     satMix = juce::jlimit (0.0f, 1.0f, sm);
     gain = juce::jlimit (0.0f, 2.0f, g);
-    coeffsDirty = true;
 
     const float clampedCents = juce::jlimit (-2400.0f, 2400.0f, cents);
     if (clampedCents != pitchCents)
@@ -69,8 +79,7 @@ void QuantumVoice::setParams (float a, float d, float s, float r,
         lastTimestepDelta = td;
         osc.markTablesDirty();
     }
-    // apply toggle not stored; keep always true for now
-    (void) apply;
+    osc.setApplyWavefunction (apply);
 }
 
 void QuantumVoice::prepareBlock()
@@ -157,4 +166,14 @@ float QuantumVoice::frequencyToPhaseInc (float freq) const
 void QuantumVoice::fillScope (float* dest, int maxN) const
 {
     osc.fillScope (dest, maxN);
+}
+
+void QuantumVoice::fillScopeMomentum (float* dest, int maxN) const
+{
+    osc.fillScopeMomentum (dest, maxN);
+}
+
+void QuantumVoice::fillPotential (float* dest, int maxN) const
+{
+    osc.fillPotential (dest, maxN);
 }

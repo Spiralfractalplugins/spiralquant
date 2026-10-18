@@ -24,6 +24,7 @@ public:
     void setEvolution (int showFFT, int sampleMode, float timestepDelta, float samplesPerTimestep);
     void setTunneling (bool enabled);
     bool hasTunneling() const { return tunnelOn; }
+    void setApplyWavefunction (bool enabled) { applyWavefunction = enabled; }
     void markTablesDirty() { tablesDirty = true; }
     void trigger ();
 
@@ -35,6 +36,8 @@ public:
 
     /** Copy latest |psi| outline for the scope (thread-unsafe; caller guards). */
     void fillScope (float* dest, int maxN) const;
+    void fillScopeMomentum (float* dest, int maxN) const;
+    void fillPotential (float* dest, int maxN) const;
 
 private:
     void generateInitial();
