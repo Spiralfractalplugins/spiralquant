@@ -25,7 +25,12 @@ public:
                     int potentialType, float potentialShift, float potentialScale, float potentialHeight,
                     int showFFT, int sampleMode, float timestepDelta, float samplesPerTimestep, bool applyWavefunction,
                     float pitchCents = 0.0f, bool tunnel = false, float jumpRate = 0.0f, float quadrature = 0.0f,
-                    float memoryAmt = 0.0f, float memoryTimeMs = 80.0f, float ringdown = 0.0f);
+                    float memoryAmt = 0.0f, float memoryTimeMs = 80.0f, float ringdown = 0.0f,
+                    float zeno = 0.0f, float squeeze = 0.0f);
+
+    /** True once per phonon jump since last call (EPR propagation, engine side). */
+    bool jumpedRecently() { return osc.consumeJumped(); }
+    void forceCollapse() { osc.collapseNow(); }
 
     void fillScope (float* dest, int maxN) const;
     void fillScopeMomentum (float* dest, int maxN) const;
