@@ -66,6 +66,7 @@ void QuantumOsc::trigger ()
 {
     generateInitial();
     computePotential();
+    applySqueeze();
     // Warm the momentum buffer so a quadrature readout is valid before the
     // very first timestep.
     fft.perform (psi, psiFFT, false);
@@ -265,6 +266,15 @@ void QuantumOsc::doTimestep (float dt)
 
         if (jumpRate > 0.0f)
             maybeJump (dt);
+
+        // Quantum Zeno: frequent projective position measurements freeze the
+        // spreading — the wave is pinned near a randomly detected bin.
+        if (zenoAmt > 0.0f)
+        {
+            std::uniform_real_distribution<float> zd (0.0f, 1.0f);
+            if (zd (rng) < zenoAmt)
+                zenoMeasure();
+        }
     }
     else
     {
@@ -289,11 +299,10 @@ void QuantumOsc::doTimestep (float dt)
     inFrequencyDomain = (showFFT != 0);
 }
 
-void QuantumOsc::maybeJump (float dt)
+float QuantumOsc::buildJumpBuf()
 {
     // Monte-Carlo wavefunction: emission of one phonon applies the annihilation
-    // operator L = (u + d/du)/sqrt(2), u = x/sigma. Between jumps the state is
-    // renormalised (no-jump term absorbed); a jump re-normalises after collapse.
+    // operator L = (u + d/du)/sqrt(2), u = x/sigma. Returns ||L psi||^2.
     const float sigma = 0.2f;
     const float dx = 2.0f / (float) (SIZE - 1);
     const float inv2dx = sigma / (2.0f * dx);
@@ -307,6 +316,24 @@ void QuantumOsc::maybeJump (float dt)
         jumpBuf[i] = (x / sigma) * psi[i] + inv2dx * (psi[ip] - psi[im]);
         s2 += std::norm (jumpBuf[i]);
     }
+    return s2;
+}
+
+void QuantumOsc::applyJumpBuf()
+{
+    float s = 0.0f;
+    for (int i = 0; i < SIZE; ++i)
+    {
+        psi[i] = jumpBuf[i];
+        s += std::norm (psi[i]);
+    }
+    s = 1.0f / std::sqrt (std::max (1.0e-12f, s));
+    for (int i = 0; i < SIZE; ++i) psi[i] *= s;
+}
+
+void QuantumOsc::maybeJump (float dt)
+{
+    const float s2 = buildJumpBuf();
 
     // 2e-5 tunes jumpRate=1 to tens of collapses per second at the default dt/spt.
     const float p = juce::jlimit (0.0f, 0.25f, jumpRate * s2 * dt * 2.0e-5f * SIZE_F);
@@ -314,12 +341,103 @@ void QuantumOsc::maybeJump (float dt)
     if (dist (rng) >= p)
         return;
 
-    float s = 0.0f;
+    applyJumpBuf();
+    jumped = true; // engine propagates this to EPR partners of the same note
+}
+
+void QuantumOsc::collapseNow()
+{
+    buildJumpBuf();
+    applyJumpBuf();
+}
+
+void QuantumOsc::zenoMeasure()
+{
+    // Born-sampled position, then Gaussian projection window around the hit.
+    float s2 = 0.0f;
+    for (int i = 0; i < SIZE; ++i)
+        s2 += std::norm (psi[i]);
+    if (s2 <= 0.0f)
+        return;
+
+    std::uniform_real_distribution<float> dist (0.0f, 1.0f);
+    float target = dist (rng) * s2;
+    int c = SIZE - 1;
     for (int i = 0; i < SIZE; ++i)
     {
-        psi[i] = jumpBuf[i];
-        s += std::norm (psi[i]);
+        target -= std::norm (psi[i]);
+        if (target <= 0.0f) { c = i; break; }
     }
+
+    const float inv2w2 = 1.0f / (2.0f * 2.5f * 2.5f); // sigma ~ 2.5 bins
+    for (int i = 0; i < SIZE; ++i)
+    {
+        const float d = (float) (i - c);
+        psi[i] *= std::exp (-d * d * inv2w2);
+    }
+    float s = 0.0f;
+    for (int i = 0; i < SIZE; ++i) s += std::norm (psi[i]);
+    s = 1.0f / std::sqrt (std::max (1.0e-12f, s));
+    for (int i = 0; i < SIZE; ++i) psi[i] *= s;
+}
+
+void QuantumOsc::applySqueeze()
+{
+    // Symplectic squeeze of the prepared state: (S psi)(y) = sqrt(sf) psi(sf*y),
+    // applied on the position grid (squeeze > 0, packet narrows, momentum
+    // spreads) or on the momentum grid (< 0, spectrum narrows, position
+    // spreads). k-space resampling wraps cyclically around DC so both
+    // frequency halves squeeze symmetrically.
+    if (squeezeAmt == 0.0f)
+        return;
+
+    const float sf = std::exp (std::abs (squeezeAmt) * 1.2f);
+    const float amp = std::sqrt (sf);
+    const bool inK = squeezeAmt < 0.0f;
+    std::complex<float>* a = psi;
+    if (inK)
+    {
+        fft.perform (psi, psiFFT, false);
+        const float invSqrt = 1.0f / std::sqrt ((float) SIZE);
+        for (int i = 0; i < SIZE; ++i) psiFFT[i] *= invSqrt;
+        a = psiFFT;
+    }
+
+    if (inK)
+    {
+        for (int i = 0; i < SIZE; ++i)
+        {
+            const float fq = (float) (i < SIZE / 2 ? i : i - SIZE);
+            const float src = std::fmod (fq * sf + (float) SIZE, (float) SIZE);
+            const int i0 = (int) src;
+            const int i1 = (i0 + 1) % SIZE;
+            const float f = src - (float) i0;
+            jumpBuf[i] = (a[i0] + (a[i1] - a[i0]) * f) * amp;
+        }
+    }
+    else
+    {
+        const float mid = (float) (SIZE - 1) * 0.5f;
+        for (int i = 0; i < SIZE; ++i)
+        {
+            const float src = ((float) i - mid) * sf + mid;
+            if (src < 0.0f || src >= (float) (SIZE - 1)) { jumpBuf[i] = {}; continue; }
+            const int i0 = (int) src;
+            const float f = src - (float) i0;
+            jumpBuf[i] = (a[i0] + (a[i0 + 1] - a[i0]) * f) * amp;
+        }
+    }
+    for (int i = 0; i < SIZE; ++i) a[i] = jumpBuf[i];
+
+    if (inK)
+    {
+        fft.perform (psiFFT, psi, true);
+        const float invSqrt = 1.0f / std::sqrt ((float) SIZE);
+        for (int i = 0; i < SIZE; ++i) psi[i] *= invSqrt;
+    }
+
+    float s = 0.0f;
+    for (int i = 0; i < SIZE; ++i) s += std::norm (psi[i]);
     s = 1.0f / std::sqrt (std::max (1.0e-12f, s));
     for (int i = 0; i < SIZE; ++i) psi[i] *= s;
 }

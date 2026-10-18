@@ -41,6 +41,14 @@ public:
     }
     /** Cavity ringdown (T1 phonon loss): fades the readout while the wave persists. */
     void setRingdown (float amount) { ringdown = juce::jlimit (0.0f, 1.0f, amount); }
+    /** Quantum Zeno: probability of a projective position measurement per step. */
+    void setZeno (float rate) { zenoAmt = juce::jlimit (0.0f, 1.0f, rate); }
+    /** Squeeze of the prepared state: >0 narrows position, <0 narrows momentum. */
+    void setSqueeze (float amount) { squeezeAmt = juce::jlimit (-1.0f, 1.0f, amount); }
+    /** True once after a phonon jump until read (engine uses it for EPR pairing). */
+    bool consumeJumped() { const bool j = jumped; jumped = false; return j; }
+    /** EPR partner response: apply the annihilation collapse without rolling. */
+    void collapseNow();
     void markTablesDirty() { tablesDirty = true; }
     void trigger ();
 
@@ -62,6 +70,10 @@ private:
     void doTimestep (float dt);
     void maybeJump (float dt);
     int memoryPushInterval() const;
+    void zenoMeasure();
+    void applySqueeze();
+    float buildJumpBuf();
+    void applyJumpBuf();
     inline std::complex<float> sampleWave (float index) const;
     inline std::complex<float> sampleArray (const std::complex<float>* arr, float index) const;
     inline float toReal (std::complex<float> v) const;
@@ -87,6 +99,9 @@ private:
     float memoryAmt = 0.0f;
     float memoryTimeMs = 80.0f;
     float ringdown = 0.0f;
+    float zenoAmt = 0.0f;
+    float squeezeAmt = 0.0f;
+    bool jumped = false;
     float damp = 1.0f;
     float memBuf[2][SIZE] {};
     int memHead = 0;
