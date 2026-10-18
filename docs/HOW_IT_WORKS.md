@@ -14,7 +14,7 @@ MIDI note
   -> QuantumEngine (sum up to 8 voices)
   -> MasterFx (optional Flanger / Phaser / Bitcrush / Fractal Entropy)
   -> stereo output
-  -> scope: |psi| from first active voice
+  -> scope: |psi(x)| + |psi~(k)| spectrum from first active voice
 ```
 
 Плагин генерирует звук не из классической wavetable, а из численного решения
@@ -120,15 +120,22 @@ psiInterpolated = (1 - frac) * psi[i0] + frac * psi[i1]
 эффектами. Solo режимы: Full / Dry / Wet.
 
 ## 8. UI и scope
-Scope показывает `|psi|` первого активного голоса. Интерфейс использует direct
-manipulation: перетаскивание положения/ширины волны и потенциала на графике,
-draggable ADSR-кривая, hover-значения.
+`QuantumEngine` пишет снапшоты `|psi|`, `|psi~|` и `V(x)` первого активного голоса
+в двойной буфер (`scopePos/scopeMom/scopePot [2][128]`) с атомарной сменой слота и
+счётчиком последовательности; аудио-поток никогда не блокируется. UI опрашивает
+`snapshotScope()` на таймере 30 Гц и перерисовывает холст только когда счётчик
+изменился. Верхняя половина холста — `|psi(x)|` с оверлеем потенциала, нижняя —
+спектр `|psi~(k)|` с гармонической сеткой (бин n = n·f₀, подписи в Гц после первой
+ноты). Интерфейс использует direct manipulation: перетаскивание положения/ширины
+волны и потенциала на графике, draggable ADSR-кривая, колесо мыши 1%/5% и двойной
+клик для точного ввода на каждой ручке. Цвета берутся из активного скина
+(`Skins::current()`: Dark / SciFi Neon / Console, параметр `uiSkin`).
 
 ## 9. State save
 Параметры хранятся в `AudioProcessorValueTreeState`, поэтому automation и
 state save/restore поддерживаются через XML.
 
-## 10. Текущие ограничения
-- `applyWavefunction` выведен в automation, но DSP сейчас всегда эволюционирует волну.
-- `SequenceEditorComponent` и Gate widgets не скомпилированы в текущую сборку.
+## 10. Примечания
+- `applyWavefunction` (тумблер QM) реально останавливает эволюцию: волна замирает,
+  голос работает как статичный wavetable.
 - `samplesPerTimestep` в UI подаётся через normalized-значения APVTS.

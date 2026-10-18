@@ -5,6 +5,9 @@ Instead of a classic wavetable, each voice's oscillator is a complex-valued
 solution of the 1D time-dependent Schrödinger equation, evolved in real time with
 a split-step Fourier method on a 128-point grid.
 
+**Docs**: [User manual (EN)](docs/MANUAL_en.md) · [Руководство (RU)](docs/MANUAL_ru.md)
+· [Announcement text](docs/ANNOUNCE_en.md) / [анонс](docs/ANNOUNCE_ru.md)
+
 ## UI
 
 ![SpiralQuant HUD interface](docs/screenshots/ui-hud.png)
@@ -81,6 +84,67 @@ a split-step Fourier method on a 128-point grid.
 
 Parameters are stored in an `AudioProcessorValueTreeState`, so host automation and
 state save/restore are supported.
+
+## How the sound is made
+
+SpiralQuant is not an oscillator with a waveform — every voice holds a **complex
+128-point wavefunction ψ(x)** that is evolved in real time with the Schrödinger
+equation, and the audio is whatever you "measure" out of it.
+
+**1. Initial state (per note-on).** `QuantumOsc::generateInitial` fills ψ with the
+selected shape on a grid x ∈ [−1, +1]: a Gaussian packet, sine, cosine, parabola,
+saw or square. `waveShift` moves the shape's centre, `waveScale` its width/spatial
+frequency, and `waveImpulse` multiplies by `e^(i·k·x)` — a momentum kick that makes
+the packet travel.
+
+**2. The potential V(x).** Six shapes (Flat, Harmonic oscillator, Infinite well,
+Barrier, Double well, Linear ramp) are sampled onto the same grid with
+`potentialShift/Scale/Height`. Cells where V exceeds the wall threshold get
+`mask[i] = false`: the wave is hard-reflected there (infinite wall). With
+**Tunnel** on, masked cells instead get `V *= exp(−2κL)` (Gamow transparency,
+κ = √(2m(V−E))) and are un-masked — the wave leaks through barriers the classical
+particle could never cross, which is where most of the "living" timbre comes from.
+
+**3. Evolution — split-step Fourier.** Every `samplesPerTimestep` audio samples
+(`timestepDelta` = dt) `doTimestep` applies one second-order Strang step:
+
+```
+ψ ← e^(−i V dt) · F⁻¹[ e^(−i k² dt/2m) · F[ψ] ]
+```
+
+i.e. a phase twist in position space for the potential, an FFT (order-7, 128
+points, via JUCE/Accelerate) to momentum space where the kinetic term is diagonal,
+a phase twist per wavenumber k², and an inverse FFT back. The transform is
+normalised by 1/√N so the step is unitary; afterwards ψ is renormalised to
+∑|ψ|² = 1 and the barrier mask is applied. Because the update is a *phase*
+rotation, no energy is created or destroyed — the wave sloshes, interferes with
+itself, diffracts around the well edges, and that interference is the sound.
+
+**4. Readout.** The output sample is ψ sampled at a moving read position
+(`sampleWave`, linear interpolation): the note's frequency sets how fast the
+read head circles the 128-point table (`phaseInc = freq/sampleRate · 128`), so
+the wave shape is the timbre and the MIDI pitch is the scan rate. `sampleMode`
+picks which part becomes audio: **Real**, **Imag**, **Magnitude** (rectified,
+bright/harsh) or **Phase** (imag/|ψ| — the instantaneous phase, very FM-like).
+With **showFFT** on, the table is kept in momentum space instead, so you hear
+|ψ̃(k)| — the frequency content of the wave as the waveform itself.
+**Apply QM** off freezes evolution: the wave stops mid-shape and the voice becomes
+a plain wavetable of that frozen state.
+
+**5. Per-voice chain.** The readout goes through an ADSR (velocity-scaled gain,
+per-note frequency glide), a resonant low-pass (Q from `filterRes`), cubic
+soft-clip saturation driven by `drive`/`satMix`, and per-voice `gain`.
+Chord mode clones a note into a just-intonation voicing with velocity falloff on
+upper degrees; `pitchShift` transposes all voices by 2^(cents/1200).
+
+**6. Master section.** Up to 8 voices are summed, then a master effect
+(Flanger/Phaser via JUCE, or custom Bitcrush/Fractal-chaos) with dry/wet solo,
+and the stereo pair is written to the bus.
+
+The UI scope shows the same data the audio uses: `|ψ(x)|` from the first active
+voice on top, and the momentum spectrum `|ψ̃(k)|` with a harmonic grid (bin n =
+n·f₀, labelled in Hz) below — the audio and the picture come from one snapshot of
+the engine, never from a look-alike animation.
 
 ## Building
 
@@ -180,6 +244,9 @@ Source/
   gui/                   palette/skins, scope canvas, ADSR editor, look-and-feel
 tests/TestRender.cpp
 vendor/JUCE/            vendored JUCE (do not edit)
+docs/                   manuals (EN/RU), announcements, HOW_IT_WORKS, screenshots
+scripts/make_dist.sh    bundles VST3/AU/Standalone + docs into dist/ + zip
+dist/                   generated release distributions (gitignored except README)
 ```
 
 ## Known limitations

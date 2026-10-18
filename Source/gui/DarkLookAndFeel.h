@@ -136,9 +136,9 @@ public:
         const Palette& pal = Skins::current();
         const float cx = (float) x + (float) width * 0.5f;
         const float cy = (float) y + (float) height * 0.5f;
-        const float outer = jmin ((float) width, (float) height) * 0.5f - 1.0f;
-        const float trackR = outer - 6.0f;
-        const float bodyR  = trackR - 3.5f;
+        const float outer  = jmin ((float) width, (float) height) * 0.5f - 1.0f;
+        const float trackR = outer - 7.5f;
+        const float bodyR  = trackR - 4.5f;
         const float norm   = jlimit (0.0f, 1.0f, sliderPos);
         const float sweep  = rotaryEndAngle - rotaryStartAngle;
         const float angle  = rotaryStartAngle + norm * sweep - MathConstants<float>::halfPi;
@@ -146,66 +146,102 @@ public:
 
         if (slider.hasKeyboardFocus (true))
         {
-            g.setColour (pal.accent.withAlpha (0.22f));
+            g.setColour (pal.accent.withAlpha (0.20f));
             g.fillEllipse (cx - outer - 3.0f, cy - outer - 3.0f, (outer + 3.0f) * 2.0f, (outer + 3.0f) * 2.0f);
         }
 
-        // All sliders share the same start/sweep angles, so the 11 tick unit
-        // vectors are memoised instead of 22 trig calls per knob per frame.
-        struct TickTable { float a0 = 0.0f, sw = 0.0f; float ux[11], uy[11]; bool valid = false; };
+        // All sliders share the same start/sweep angles, so the tick unit vectors
+        // are memoised instead of 42 trig calls per knob per frame.
+        constexpr int numTicks = 21;
+        struct TickTable { float a0 = 0.0f, sw = 0.0f; float ux[numTicks], uy[numTicks]; bool valid = false; };
         static thread_local TickTable ticks;
         if (! ticks.valid || ticks.a0 != rotaryStartAngle || ticks.sw != sweep)
         {
             ticks.a0 = rotaryStartAngle; ticks.sw = sweep; ticks.valid = true;
-            for (int i = 0; i <= 10; ++i)
+            for (int i = 0; i < numTicks; ++i)
             {
-                const float t = rotaryStartAngle + sweep * (float) i / 10.0f - MathConstants<float>::halfPi;
+                const float t = rotaryStartAngle + sweep * (float) i / (float) (numTicks - 1)
+                                - MathConstants<float>::halfPi;
                 ticks.ux[i] = std::cos (t);
                 ticks.uy[i] = std::sin (t);
             }
         }
 
-        for (int i = 0; i <= 10; ++i)
+        // Tick ring: major marks at 0/25/50/75/100%, lit ticks follow the value.
+        for (int i = 0; i < numTicks; ++i)
         {
-            const bool major = i == 0 || i == 5 || i == 10;
-            const float r0 = trackR + 2.0f;
-            const float r1 = major ? outer : outer - 2.0f;
-            g.setColour ((float) i / 10.0f <= norm + 0.001f
-                             ? fill.withAlpha (0.9f) : pal.textDim.withAlpha (0.45f));
+            const bool major = i % 5 == 0;
+            const float r0 = trackR + 2.5f;
+            const float r1 = major ? outer : outer - 2.5f;
+            g.setColour ((float) i / (float) (numTicks - 1) <= norm + 0.001f
+                             ? fill.withAlpha (major ? 0.95f : 0.6f)
+                             : pal.textDim.withAlpha (major ? 0.55f : 0.3f));
             g.drawLine (cx + ticks.ux[i] * r0, cy + ticks.uy[i] * r0,
-                        cx + ticks.ux[i] * r1, cy + ticks.uy[i] * r1, major ? 1.4f : 1.0f);
+                        cx + ticks.ux[i] * r1, cy + ticks.uy[i] * r1, major ? 1.5f : 1.0f);
         }
 
-        // Track and value arcs. Path arcs measure angles from 12 o'clock,
-        // so they take the raw slider angles, unlike the cos/sin maths below.
-        Path track;
-        track.addCentredArc (cx, cy, trackR, trackR, 0.0f, rotaryStartAngle, rotaryEndAngle, true);
+        // Track: a dark groove under the plain track arc reads as depth.
+        // Path arcs measure angles from 12 o'clock, so they take the raw slider
+        // angles, unlike the cos/sin maths below.
+        Path groove;
+        groove.addCentredArc (cx, cy, trackR, trackR, 0.0f, rotaryStartAngle, rotaryEndAngle, true);
+        g.setColour (juce::Colour (0x59000000));
+        g.strokePath (groove, PathStrokeType (5.5f, PathStrokeType::curved, PathStrokeType::rounded));
+
         g.setColour (pal.knobTrack);
-        g.strokePath (track, PathStrokeType (3.0f, PathStrokeType::curved, PathStrokeType::rounded));
+        g.strokePath (groove, PathStrokeType (3.0f, PathStrokeType::curved, PathStrokeType::rounded));
 
         if (norm > 0.002f)
         {
             Path arc;
             arc.addCentredArc (cx, cy, trackR, trackR, 0.0f, rotaryStartAngle, rotaryStartAngle + norm * sweep, true);
+            g.setColour (fill.withAlpha (0.28f));
+            g.strokePath (arc, PathStrokeType (7.0f, PathStrokeType::curved, PathStrokeType::rounded));
             g.setColour (fill);
-            g.strokePath (arc, PathStrokeType (3.0f, PathStrokeType::curved, PathStrokeType::rounded));
+            g.strokePath (arc, PathStrokeType (2.8f, PathStrokeType::curved, PathStrokeType::rounded));
         }
 
-        // Knob body: fake drop shadow, then lit-corner to shadowed-corner gradient.
-        g.setColour (juce::Colour (0x60000000));
-        g.fillEllipse (cx - bodyR + 1.5f, cy - bodyR + 2.5f, bodyR * 2.0f, bodyR * 2.0f);
-        g.setGradientFill (ColourGradient (pal.knobHi, cx - bodyR, cy - bodyR,
-                                          pal.knobLo, cx + bodyR, cy + bodyR, false));
+        // Knob body: drop shadow, diagonal gradient with a lit mid-band, double rim.
+        g.setColour (juce::Colour (0x70000000));
+        g.fillEllipse (cx - bodyR + 1.5f, cy - bodyR + 3.0f, bodyR * 2.0f, bodyR * 2.0f);
+
+        ColourGradient body (pal.knobHi, cx - bodyR, cy - bodyR, pal.knobLo, cx + bodyR, cy + bodyR, false);
+        g.setGradientFill (body);
         g.fillEllipse (cx - bodyR, cy - bodyR, bodyR * 2.0f, bodyR * 2.0f);
-        g.setColour (fill.withAlpha (0.45f));
-        g.drawEllipse (cx - bodyR, cy - bodyR, bodyR * 2.0f, bodyR * 2.0f, 1.0f);
+
+        // Lit upper-left rim + inner ring.
+        Path rimLight;
+        rimLight.addCentredArc (cx, cy, bodyR - 1.0f, bodyR - 1.0f, 0.0f,
+                                MathConstants<float>::pi * 1.05f, MathConstants<float>::pi * 1.75f, true);
+        g.setColour (juce::Colour (0x66ffffff));
+        g.strokePath (rimLight, PathStrokeType (1.4f, PathStrokeType::curved, PathStrokeType::rounded));
+        g.setColour (fill.withAlpha (0.5f));
+        g.drawEllipse (cx - bodyR, cy - bodyR, bodyR * 2.0f, bodyR * 2.0f, 1.2f);
 
         const float c = std::cos (angle), s = std::sin (angle);
-        g.setColour (pal.text);
-        g.drawLine (cx + c * bodyR * 0.55f, cy + s * bodyR * 0.55f,
-                    cx + c * bodyR * 0.90f, cy + s * bodyR * 0.90f, 2.5f);
 
+        // Grip marks opposite the pointer, so the knob reads as a turned object.
+        for (float da : { MathConstants<float>::twoPi / 3.0f, -MathConstants<float>::twoPi / 3.0f })
+        {
+            const float gc = std::cos (angle + da), gs = std::sin (angle + da);
+            g.setColour (juce::Colour (0x60000000));
+            g.fillEllipse (cx + gc * bodyR * 0.72f - 1.7f, cy + gs * bodyR * 0.72f - 1.7f, 3.4f, 3.4f);
+        }
+
+        // Inner well + pointer
+        g.setColour (juce::Colour (0x30000000));
+        g.fillEllipse (cx - bodyR * 0.42f, cy - bodyR * 0.42f, bodyR * 0.84f, bodyR * 0.84f);
+        g.setColour (pal.text);
+        g.drawLine (cx + c * bodyR * 0.30f, cy + s * bodyR * 0.30f,
+                    cx + c * bodyR * 0.92f, cy + s * bodyR * 0.92f, 2.4f);
+        g.setColour (pal.text.brighter (0.25f));
+        g.drawLine (cx + c * bodyR * 0.30f, cy + s * bodyR * 0.30f,
+                    cx + c * bodyR * 0.92f, cy + s * bodyR * 0.92f, 1.0f);
+
+        // Value dot riding on the arc + accent hub
         g.setColour (fill);
-        g.fillEllipse (cx + c * trackR - 2.4f, cy + s * trackR - 2.4f, 4.8f, 4.8f);
+        g.fillEllipse (cx + c * trackR - 2.6f, cy + s * trackR - 2.6f, 5.2f, 5.2f);
+        g.setColour (pal.text);
+        g.fillEllipse (cx - 1.6f, cy - 1.6f, 3.2f, 3.2f);
     }
 };
