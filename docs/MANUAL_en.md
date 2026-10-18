@@ -49,7 +49,7 @@ Run `SpiralQuant.app` (or the Windows/Linux executable) directly — no host nee
 |                              |  WAVEFUNCTION                 |
 |   WAVE |ψ(x)| + POTENTIAL    |  chips: WAVE, FFT, QM, sample |
 |   SPECTRUM |ψ̃(k)|            |  knobs: SHIFT WIDTH IMPULSE   |
-|   (harmonic grid, Hz labels) |          DT STEP COLLAPSE QUAD|
+|   (harmonic grid, Hz labels) |          DT STEP COLLAPSE QUAD ZENO SQUEEZE|
 +------------------------------+-------------------------------+
 |                              |  POTENTIAL                    |
 |   ADSR editor (drag handles) |  chips: POT, TUNNEL           |
@@ -57,7 +57,7 @@ Run `SpiralQuant.app` (or the Windows/Linux executable) directly — no host nee
 |                              |    MEMORY LAG RING            |
 +------------------------------+-------------------------------+
 | HARMONY: CHORD, SUPERPOSE,   |  ENVELOPE: A D S R            |
-| WALK chips, chord type combo,|  FILTER & DRIVE: CUTOFF RESO  |
+| WALK/EPR chips, chord type   |  FILTER & DRIVE: CUTOFF RESO  |
 | PITCH + RATE knobs           |    DRIVE SAT GAIN             |
 |                              |  MASTER FX: type/solo/LIMIT + |
 |                              |    DEPTH RATE FDBK MIX BITS   |
@@ -94,6 +94,8 @@ Run `SpiralQuant.app` (or the Windows/Linux executable) directly — no host nee
 | **STEP** (`samplesPerTimestep`) | Audio samples between evolution steps. Low = fast wave (more CPU), high = slow morphing. Below 1 runs several steps per sample. |
 | **COLLAPSE** (`jumpRate`) | Phonon-collapse rate. Above 0 each step can randomly collapse ψ onto the annihilation operator â ψ and renormalise — stochastic "quantum jumps of sound": percussive snaps and granular decay on top of the smooth wave. 0 = pure unitary evolution. |
 | **QUAD** (`frftAngle`) | Quadrature rotation of the readout: 0 hears ψ(x), 1 hears the momentum wave ψ̃(k), in between gives fractional-Fourier mixtures. Free (reuses the last FFT). |
+| **ZENO** (`zeno`) | Quantum Zeno effect: with this probability each step performs a position measurement and projects ψ through a narrow Gaussian window. A watched wave stops evolving — high values pin the packet in place (nearly static tone), low values just slow its travel. |
+| **SQUEEZE** (`squeeze`) | Squeezed states, −1..+1: at note-on ψ is symplectically rescaled. Positive narrows |ψ(x)| in space (wider momentum spectrum, brighter transient); negative narrows it in momentum (longer, purer ring). Heisenberg is conserved — uncertainty moves, it doesn't vanish. |
 | **FFT** toggle | Freeze evolution and read ψ̃(k): the momentum spectrum becomes the audio. Very metallic/organ-like. |
 | **QM** toggle | Master switch for evolution. Off = the wave freezes mid-shape and the voice becomes a static wavetable. |
 | **Sample mode** combo | Which part of complex ψ becomes audio: Real / Imag / Magnitude / Phase / PhononQND. Magnitude = bright and buzzy; Phase = FM-like; PhononQND = 8-step amplitude staircase (quantum non-demolition readout, clicks as ψ crosses levels). |
@@ -158,6 +160,11 @@ Fractal. When Off, the whole section dims and is bypassed.
   cleanly when switched down.
 - **RATE**: walk measurement ticks per second (0.25–8 Hz) — how often a new
   note is sampled from the walker.
+- **EPR**: entangled voices (needs COLLAPSE > 0). Voices sharing one MIDI note
+  (e.g. the two SUPERPOSE variants) behave like one EPR pair: a phonon jump on
+  one partner instantly applies the same collapse to the others in the same
+  block, so they snap to consistent states together. No cascade — forced
+  collapses never re-trigger propagation.
 
 ---
 

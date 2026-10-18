@@ -51,6 +51,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Master output limiter (`limiter`, LIMIT chip, on by default): stereo-linked
   brickwall just under full scale after the FX — fast attack, 80 ms release,
   hard ±1 clamp; quiet blocks skip processing via a vectorized block-peak test.
+- Quantum Zeno effect (`zeno`, ZENO knob): per-step Born-sampled position
+  projections with Gaussian windows — watching the wave freezes its evolution.
+- Squeezed states (`squeeze`, SQUEEZE knob, −1..+1): symplectic rescaling at
+  note-on moves uncertainty between position and momentum (+ narrows |ψ(x)|,
+  − narrows |ψ(k)|), verified by a variance test in the render suite.
+- EPR-entangled voices (`entangle`, EPR chip in HARMONY): a phonon jump on one
+  voice instantly collapses its same-note partners within the same block,
+  without cascading.
+- Scope canvas: the potential now has its own lower lane (ceiling at 55% of
+  panel height) and can no longer overlap the |ψ(x)| curve.
 
 ### Changed
 - `applyWavefunction` (QM toggle) now freezes wavefunction evolution when off

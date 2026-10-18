@@ -90,6 +90,9 @@ a split-step Fourier method on a 128-point grid.
 | `walkOn`             | bool     | — (quantum-walk melody generator)             | false   |
 | `walkRate`           | float    | 0.25 – 8 Hz (walk measurement ticks)          | 2.0     |
 | `limiter`            | bool     | — (master output limiter)                     | true    |
+| `zeno`               | float    | 0.0 – 1.0 (Zeno measurement rate)             | 0.0     |
+| `entangle`           | bool     | — (EPR: jumps collapse same-note partners)    | false   |
+| `squeeze`            | float    | -1.0 – +1.0 (− momentum, + position squeeze)  | 0.0     |
 
 Parameters are stored in an `AudioProcessorValueTreeState`, so host automation and
 state save/restore are supported.
@@ -196,6 +199,27 @@ entirely (one vectorized block-peak check); when a chord or drive spike pushes
 a block over the threshold, gain is pulled down with a ~1 ms attack and an
 ~80 ms release, and a final clamp guarantees the output never leaves [−1, +1].
 Switch the LIMIT chip off for unprotected (potentially clipping) output.
+
+**Quantum Zeno effect (`zeno`).** Watching a quantum system freezes it. With the
+rate above zero, each evolution step performs a weak position measurement with
+probability `zeno`: |ψ|² is sampled Born-style to pick a bin, and the wave is
+projected through a narrow Gaussian window around it. Frequent projections
+destroy the interference that spreads the packet — high `zeno` pins the wave in
+place (a held, nearly static tone), low values just slow its travel.
+
+**Squeezed states (`squeeze`).** Heisenberg divides: uncertainty can be moved
+between conjugate variables, not removed. At note-on the wave is reshaped by a
+symplectic scaling — positive values narrow |ψ(x)| in space (the momentum
+spectrum |ψ(k)| widens, the tone gets brighter noisier transients), negative
+values narrow it in momentum (the packet smears out in space, giving a purer,
+longer-ringing tone). 0 leaves the initial state untouched.
+
+**EPR-entangled voices (`entangle`).** With phonon collapse and this chip on,
+voices that share a MIDI note (e.g. the two variants of a superposed chord) are
+treated as one entangled system: when a quantum jump collapses one partner, the
+same measurement is applied to the others *in the same block* — they snap to a
+consistent state together, like correlated EPR outcomes. No cascade: the forced
+collapse never re-triggers propagation.
 
 **6. Master section.** Up to 8 voices are summed, then a master effect
 (Flanger/Phaser via JUCE, or custom Bitcrush/Fractal-chaos) with dry/wet solo,
