@@ -94,14 +94,16 @@ PluginEditor::PluginEditor (PluginProcessor& p)
     applyQm.setButtonText ("QM");
     chordChip.setButtonText ("CHORD");
     tunnelChip.setButtonText ("TUNNEL");
-    for (auto* b : { &showFFT, &applyQm, &chordChip, &tunnelChip })
+    superposeChip.setButtonText ("SUPERPOSE");
+    for (auto* b : { &showFFT, &applyQm, &chordChip, &tunnelChip, &superposeChip })
         addAndMakeVisible (*b);
     showFFT.setTooltip ("Freeze evolution and read the momentum-domain (FFT) wave.");
     applyQm.setTooltip ("Master switch for real-time Schrodinger evolution. Off freezes the wave.");
     chordChip.setTooltip ("Play harmonically tuned chords from every single note.");
     tunnelChip.setTooltip ("Quantum tunneling: the wavefunction leaks through potential barriers.");
+    superposeChip.setTooltip ("Chord superposition: each note holds two voicings at once; note-off measures (collapses) it to one.");
 
-    sampleMode.addItemList ({ "Real","Imag","Magnitude","Phase" }, 1);
+    sampleMode.addItemList ({ "Real","Imag","Magnitude","Phase","PhononQND" }, 1);
     fxType.addItemList ({ "Off","Flanger","Phaser","Bitcrush","Fractal" }, 1);
     fxSolo.addItemList ({ "Full","Dry","Wet" }, 1);
     chordType.addItemList ({ "Power","Major","Minor","Sus4","Major7","Tritone","Cluster","Pythagorean" }, 1);
@@ -124,7 +126,9 @@ PluginEditor::PluginEditor (PluginProcessor& p)
             { "waveScale",    "WIDTH",   "Width of the wave packet / spatial frequency.", percent },
             { "waveImpulse",  "IMPULSE", "Momentum kick baked into the initial wave.", percent },
             { "timestepDelta","DT",      "Schrodinger evolution step dt. Smaller = smoother wave, more CPU.", dtText },
-            { "samplesPerTimestep", "STEP", "Audio samples between evolution steps. Lower = faster wave.", stepText } } },
+            { "samplesPerTimestep", "STEP", "Audio samples between evolution steps. Lower = faster wave.", stepText },
+            { "jumpRate",   "COLLAPSE", "Phonon-collapse rate: random quantum jumps squeeze the wave (Monte-Carlo wavefunction).", percent },
+            { "frftAngle",  "QUAD",     "Quadrature rotation of the readout: 0 reads psi(x), 1 reads the momentum state psi(k).", percent } } },
         { Group::Potential, {
             { "potentialShift",  "CENTER", "Where the potential sits.", percent },
             { "potentialScale",  "WIDTH",  "Barrier width / curvature.", percent },
@@ -158,6 +162,7 @@ PluginEditor::PluginEditor (PluginProcessor& p)
     showFFTAtt  = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (processor.apvts, "showFFT", showFFT);
     applyQmAtt  = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (processor.apvts, "applyWavefunction", applyQm);
     chordAtt    = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (processor.apvts, "chordMode", chordChip);
+    superposeAtt = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (processor.apvts, "chordSuperpose", superposeChip);
     tunnelAtt   = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (processor.apvts, "tunnel", tunnelChip);
     sampleModeAtt = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (processor.apvts, "sampleMode", sampleMode);
     fxTypeAtt     = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (processor.apvts, "fxType", fxType);
@@ -166,6 +171,7 @@ PluginEditor::PluginEditor (PluginProcessor& p)
     uiSkinAtt     = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (processor.apvts, "uiSkin", skinCombo);
 
     applySkin();
+    resized();  // setSize() above ran before the knobs existed; lay out once now.
     startTimerHz (20);
 }
 
@@ -275,7 +281,7 @@ void PluginEditor::resized()
         showFFT.setBounds (r.removeFromLeft ((int) (52 * uiScale)).reduced (2));
         applyQm.setBounds (r.removeFromLeft ((int) (56 * uiScale)).reduced (2));
         sampleMode.setBounds (r.removeFromRight ((int) (116 * uiScale)).reduced (2));
-    }, { "waveShift", "waveScale", "waveImpulse", "timestepDelta", "samplesPerTimestep" });
+    }, { "waveShift", "waveScale", "waveImpulse", "timestepDelta", "samplesPerTimestep", "jumpRate", "frftAngle" });
 
     layoutPanel (potArea, true, [this] (juce::Rectangle<int> r) {
         potentialTypeChip.setBounds (r.removeFromLeft (juce::jmin (r.getWidth() - 120, (int) (160 * uiScale))).reduced (2));
@@ -296,6 +302,7 @@ void PluginEditor::resized()
         h.removeFromLeft ((int) (86 * uiScale)); // title zone
         chordChip.setBounds (h.removeFromLeft ((int) (76 * uiScale)).reduced (2));
         chordType.setBounds (h.removeFromLeft ((int) (140 * uiScale)).reduced (2));
+        superposeChip.setBounds (h.removeFromLeft ((int) (112 * uiScale)).reduced (2));
         auto knobCell = h.withWidth (juce::jmin (h.getWidth(), (int) (90 * uiScale)));
         if (knobCell.getWidth() >= (int) (50 * uiScale))
             for (const auto& k : knobs)
@@ -333,7 +340,8 @@ void PluginEditor::applySkin()
     applyQm.setColour (juce::ToggleButton::tickColourId, accentFor (Group::Wave));
     tunnelChip.setColour (juce::ToggleButton::tickColourId, accentFor (Group::Potential));
     chordChip.setColour (juce::ToggleButton::tickColourId, accentFor (Group::Harmony));
-    for (auto* b : { &showFFT, &applyQm, &tunnelChip, &chordChip })
+    superposeChip.setColour (juce::ToggleButton::tickColourId, accentFor (Group::Harmony));
+    for (auto* b : { &showFFT, &applyQm, &tunnelChip, &chordChip, &superposeChip })
         b->setColour (juce::ToggleButton::textColourId, pal.text);
 
     for (auto& k : knobs)
@@ -389,6 +397,7 @@ void PluginEditor::timerCallback()
     {
         chordType.setAlpha (chordOn ? 1.0f : 0.45f);
         chordType.setEnabled (chordOn);
+        superposeChip.setAlpha (chordOn ? 1.0f : 0.45f);
     }
 }
 

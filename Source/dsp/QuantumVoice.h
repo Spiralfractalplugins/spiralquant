@@ -9,6 +9,8 @@ public:
     void prepare (double sampleRateHz);
     void noteOn (int midiNote, int velocity, float ratio = 1.0f);
     void noteOff();
+    /** Hard stop, skipping release (used by superposition collapse). */
+    void kill() { state = State::Idle; envelope = 0.0f; }
 
     bool isActive() const { return state != State::Idle; }
     float process (const float* params); // params not used; reads internal knobs? placeholder
@@ -22,7 +24,7 @@ public:
                     int waveType, float waveShift, float waveScale, float waveImpulse,
                     int potentialType, float potentialShift, float potentialScale, float potentialHeight,
                     int showFFT, int sampleMode, float timestepDelta, float samplesPerTimestep, bool applyWavefunction,
-                    float pitchCents = 0.0f, bool tunnel = false);
+                    float pitchCents = 0.0f, bool tunnel = false, float jumpRate = 0.0f, float quadrature = 0.0f);
 
     void fillScope (float* dest, int maxN) const;
     void fillScopeMomentum (float* dest, int maxN) const;
@@ -76,6 +78,7 @@ private:
         int pt; float ps, psc, ph;
         int sf, smode; float td, spt;
         bool apply; float cents; bool tunnel;
+        float jr, qd;
 
         bool operator== (const LastInputs& o) const
         {
@@ -84,7 +87,8 @@ private:
                 && wt == o.wt && ws == o.ws && wsc == o.wsc && wi == o.wi
                 && pt == o.pt && ps == o.ps && psc == o.psc && ph == o.ph
                 && sf == o.sf && smode == o.smode && td == o.td && spt == o.spt
-                && apply == o.apply && cents == o.cents && tunnel == o.tunnel;
+                && apply == o.apply && cents == o.cents && tunnel == o.tunnel
+                && jr == o.jr && qd == o.qd;
         }
     };
     LastInputs last {};

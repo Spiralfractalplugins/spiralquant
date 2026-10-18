@@ -56,7 +56,7 @@ a split-step Fourier method on a 128-point grid.
 | `potentialScale`     | float    | 0.0 – 1.0                                     | 0.5     |
 | `potentialHeight`    | float    | 0.0 – 1.0                                     | 0.5     |
 | `showFFT`            | bool     | —                                             | false   |
-| `sampleMode`         | choice   | Real / Imag / Magnitude / Phase               | 0 (Real) |
+| `sampleMode`         | choice   | Real / Imag / Magnitude / Phase / PhononQND   | 0 (Real) |
 | `timestepDelta`      | float    | 0.001 – 0.2                                   | 0.01    |
 | `samplesPerTimestep` | float    | 0.1 – 64                                      | 8       |
 | `applyWavefunction`  | bool     | — (off freezes evolution)                     | true    |
@@ -81,6 +81,9 @@ a split-step Fourier method on a 128-point grid.
 | `pitchShift`         | float    | -2400 – +2400 cents                           | 0       |
 | `tunnel`             | bool     | —                                             | false   |
 | `uiSkin`             | choice   | Dark / SciFi Neon / Console (UI only)         | 0 (Dark) |
+| `chordSuperpose`     | bool     | — (chords in quantum superposition)           | false   |
+| `jumpRate`           | float    | 0.0 – 1.0 (phonon-collapse rate)              | 0.0     |
+| `frftAngle`          | float    | 0.0 – 1.0 (quadrature rotation x↔k)           | 0.0     |
 
 Parameters are stored in an `AudioProcessorValueTreeState`, so host automation and
 state save/restore are supported.
@@ -125,9 +128,14 @@ itself, diffracts around the well edges, and that interference is the sound.
 read head circles the 128-point table (`phaseInc = freq/sampleRate · 128`), so
 the wave shape is the timbre and the MIDI pitch is the scan rate. `sampleMode`
 picks which part becomes audio: **Real**, **Imag**, **Magnitude** (rectified,
-bright/harsh) or **Phase** (imag/|ψ| — the instantaneous phase, very FM-like).
-With **showFFT** on, the table is kept in momentum space instead, so you hear
-|ψ̃(k)| — the frequency content of the wave as the waveform itself.
+bright/harsh), **Phase** (imag/|ψ| — the instantaneous phase, very FM-like) or
+**PhononQND** (an 8-step staircase quantisation of Re ψ — a "quantum non-demolition"
+readout that clicks as the wave crosses discrete amplitude levels). `frftAngle`
+rotates the readout quadrature, blending the position-space sample with the
+momentum-space one (the last FFT, so it is free) — 0 hears ψ(x), 1 hears ψ̃(k),
+with fractional Fourier-like mixtures in between. With **showFFT** on, the table is
+kept in momentum space instead, so you hear |ψ̃(k)| — the frequency content of the
+wave as the waveform itself.
 **Apply QM** off freezes evolution: the wave stops mid-shape and the voice becomes
 a plain wavetable of that frozen state.
 
@@ -136,6 +144,21 @@ per-note frequency glide), a resonant low-pass (Q from `filterRes`), cubic
 soft-clip saturation driven by `drive`/`satMix`, and per-voice `gain`.
 Chord mode clones a note into a just-intonation voicing with velocity falloff on
 upper degrees; `pitchShift` transposes all voices by 2^(cents/1200).
+
+**Phonon collapse (`jumpRate`).** With the rate above zero, each evolution step also
+runs a Monte-Carlo quantum-trajectory measurement: the phonon-annihilation operator
+â ψ = (x/σ)ψ + σ·∂ψ/x is applied, and with probability ∝ `jumpRate`·‖â ψ‖²·dt the
+wavefunction *collapses* onto â ψ and is renormalised. This is the stochastic
+"quantum jump of sound" — the smooth wave periodically snaps to a lower-energy
+shape, producing percussive transients and granular decay that pure unitary
+evolution can't reach. Collapses are seeded per voice, so renders are reproducible.
+
+**Superposed chords (`chordSuperpose`).** With chord mode on, instead of one fixed
+voicing the engine spawns *two* competing chord types per note, weighted cos²φ /
+sin²φ by a random phase φ. The note rings in a superposition of both voicings until
+you release it: note-off is a *measurement* that collapses to one winner (prob.
+cos²φ) — the loser is killed instantly, the winner releases normally — so the same
+note can resolve to different harmony each take.
 
 **6. Master section.** Up to 8 voices are summed, then a master effect
 (Flanger/Phaser via JUCE, or custom Bitcrush/Fractal-chaos) with dry/wet solo,
@@ -173,9 +196,12 @@ cmake --build build --target SpiralQuantTests --config Release
 
 The suite:
 
-- renders every `waveType × potentialType × sampleMode` combination (6×6×4),
+- renders every `waveType × potentialType × sampleMode` combination (6×6×5),
   checking for NaN/inf and non-silent output;
 - renders the chord × pitch-shift × tunneling matrix;
+- renders the phonon features: collapse (deterministic across identical seeds),
+  quadrature rotation, PhononQND staircase, and superposed chords (verifying notes
+  go silent after release — no stuck voices);
 - exercises all master FX types and a state save/restore roundtrip;
 - `--bench` runs a deterministic 20 000-block, 8-voice CPU benchmark;
 - `--render-logo <dir>` regenerates `resources/logo.png` and the iconset PNGs

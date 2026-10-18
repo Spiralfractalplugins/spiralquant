@@ -1,6 +1,15 @@
 #include "QuantumOsc.h"
 #include <cmath>
 
+unsigned QuantumOsc::instanceCounter = 0;
+
+QuantumOsc::QuantumOsc()
+{
+    // Mask keeps voice i of every engine instance on the same seed while the
+    // eight voices still jump independently (test reproducibility).
+    rng.seed (20261018u + (instanceCounter++ & 7u));
+}
+
 void QuantumOsc::prepare (double sampleRateHz)
 {
     sampleRate = sampleRateHz <= 0.0 ? 48000.0 : sampleRateHz;
@@ -57,6 +66,11 @@ void QuantumOsc::trigger ()
 {
     generateInitial();
     computePotential();
+    // Warm the momentum buffer so a quadrature readout is valid before the
+    // very first timestep.
+    fft.perform (psi, psiFFT, false);
+    const float invSqrt = 1.0f / std::sqrt (SIZE_F);
+    for (int i = 0; i < SIZE; ++i) psiFFT[i] *= invSqrt;
     inFrequencyDomain = (showFFT != 0);
     const int steps = (int) std::max (0.0f, preStartSteps);
     for (int i = 0; i < steps; ++i)
@@ -223,6 +237,9 @@ void QuantumOsc::doTimestep (float dt)
         }
         s = 1.0f / std::sqrt (std::max (1.0e-12f, s));
         for (int i = 0; i < SIZE; ++i) psi[i] *= s;
+
+        if (jumpRate > 0.0f)
+            maybeJump (dt);
     }
     else
     {
@@ -234,6 +251,41 @@ void QuantumOsc::doTimestep (float dt)
         for (int i = 0; i < SIZE; ++i) psi[i] *= s;
     }
     inFrequencyDomain = (showFFT != 0);
+}
+
+void QuantumOsc::maybeJump (float dt)
+{
+    // Monte-Carlo wavefunction: emission of one phonon applies the annihilation
+    // operator L = (u + d/du)/sqrt(2), u = x/sigma. Between jumps the state is
+    // renormalised (no-jump term absorbed); a jump re-normalises after collapse.
+    const float sigma = 0.2f;
+    const float dx = 2.0f / (float) (SIZE - 1);
+    const float inv2dx = sigma / (2.0f * dx);
+
+    float s2 = 0.0f;
+    for (int i = 0; i < SIZE; ++i)
+    {
+        const float x = 2.0f * (float) i / (float) (SIZE - 1) - 1.0f;
+        const int im = juce::jmax (0, i - 1);
+        const int ip = juce::jmin (SIZE - 1, i + 1);
+        jumpBuf[i] = (x / sigma) * psi[i] + inv2dx * (psi[ip] - psi[im]);
+        s2 += std::norm (jumpBuf[i]);
+    }
+
+    // 2e-5 tunes jumpRate=1 to tens of collapses per second at the default dt/spt.
+    const float p = juce::jlimit (0.0f, 0.25f, jumpRate * s2 * dt * 2.0e-5f * SIZE_F);
+    std::uniform_real_distribution<float> dist (0.0f, 1.0f);
+    if (dist (rng) >= p)
+        return;
+
+    float s = 0.0f;
+    for (int i = 0; i < SIZE; ++i)
+    {
+        psi[i] = jumpBuf[i];
+        s += std::norm (psi[i]);
+    }
+    s = 1.0f / std::sqrt (std::max (1.0e-12f, s));
+    for (int i = 0; i < SIZE; ++i) psi[i] *= s;
 }
 
 float QuantumOsc::getNextSample (float phaseIncrement)
@@ -260,7 +312,13 @@ float QuantumOsc::getNextSample (float phaseIncrement)
         }
     }
 
-    const std::complex<float> v = sampleWave (phase);
+    std::complex<float> v = sampleWave (phase);
+    // Approximate fractional-Fourier readout: rotate the sampled quadrature
+    // between psi(x) and the momentum state of the last step. Degenerate when
+    // showFFT already reads psi(k).
+    if (quadrature > 0.0f && ! showFFT)
+        v = v * (1.0f - quadrature) + sampleArray (psiFFT, phase) * quadrature;
+
     phase += phaseIncrement;
     if (phase >= (float) SIZE) phase -= (float) SIZE;
     if (phase < 0.0f) phase = 0.0f;
@@ -270,12 +328,17 @@ float QuantumOsc::getNextSample (float phaseIncrement)
 
 std::complex<float> QuantumOsc::sampleWave (float index) const
 {
+    return sampleArray (psi, index);
+}
+
+std::complex<float> QuantumOsc::sampleArray (const std::complex<float>* arr, float index) const
+{
     int i0 = (int) index;
     const float frac = index - (float) i0;
     if (i0 < 0) i0 = 0;
     if (i0 >= SIZE) i0 = SIZE - 1;
     const int i1 = (i0 + 1 == SIZE) ? 0 : i0 + 1;
-    return psi[i0] * (1.0f - frac) + psi[i1] * frac;
+    return arr[i0] * (1.0f - frac) + arr[i1] * frac;
 }
 
 float QuantumOsc::toReal (std::complex<float> v) const
@@ -284,6 +347,9 @@ float QuantumOsc::toReal (std::complex<float> v) const
     if (sampleMode == 2) return std::abs (v);
     // Identical to sin(arg(v)) but skips an atan2 plus a sine per sample.
     if (sampleMode == 3) return v.imag () / std::max (1.0e-12f, std::abs (v));
+    // Phonon QND: staircase the amplitude onto discrete levels, so the
+    // discreteness of the measured energy is audible even mid-sweep.
+    if (sampleMode == 4) return std::round (v.real() * 8.0f) / 8.0f;
     return v.real();
 }
 

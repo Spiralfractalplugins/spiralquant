@@ -46,3 +46,4 @@ vendor/
 # Distribution output (keep the folder's README)
 dist/*
 !dist/README.md
+.licenses/

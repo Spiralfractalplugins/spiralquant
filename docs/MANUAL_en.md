@@ -49,14 +49,15 @@ Run `SpiralQuant.app` (or the Windows/Linux executable) directly — no host nee
 |                              |  WAVEFUNCTION                 |
 |   WAVE |ψ(x)| + POTENTIAL    |  chips: WAVE, FFT, QM, sample |
 |   SPECTRUM |ψ̃(k)|            |  knobs: SHIFT WIDTH IMPULSE   |
-|   (harmonic grid, Hz labels) |          DT STEP              |
+|   (harmonic grid, Hz labels) |          DT STEP COLLAPSE QUAD|
 +------------------------------+-------------------------------+
 |                              |  POTENTIAL                    |
 |   ADSR editor (drag handles) |  chips: POT, TUNNEL           |
 |                              |  knobs: CENTER WIDTH HEIGHT   |
 +------------------------------+-------------------------------+
-| HARMONY: CHORD chip, chord   |  ENVELOPE: A D S R            |
-| type combo, PITCH knob       |  FILTER & DRIVE: CUTOFF RESO  |
+| HARMONY: CHORD, SUPERPOSE    |  ENVELOPE: A D S R            |
+| chip, chord type combo,      |  FILTER & DRIVE: CUTOFF RESO  |
+| PITCH knob                   |    DRIVE SAT GAIN             |
 |                              |    DRIVE SAT GAIN             |
 |                              |  MASTER FX: type/solo +       |
 |                              |    DEPTH RATE FDBK MIX BITS   |
@@ -91,9 +92,11 @@ Run `SpiralQuant.app` (or the Windows/Linux executable) directly — no host nee
 | **IMPULSE** | Momentum kick e^(ikx): makes the packet travel toward a wall at note start. |
 | **DT** (`timestepDelta`) | Schrödinger time step. Small = smooth, CPU-neutral; large = wilder evolution per step. |
 | **STEP** (`samplesPerTimestep`) | Audio samples between evolution steps. Low = fast wave (more CPU), high = slow morphing. Below 1 runs several steps per sample. |
+| **COLLAPSE** (`jumpRate`) | Phonon-collapse rate. Above 0 each step can randomly collapse ψ onto the annihilation operator â ψ and renormalise — stochastic "quantum jumps of sound": percussive snaps and granular decay on top of the smooth wave. 0 = pure unitary evolution. |
+| **QUAD** (`frftAngle`) | Quadrature rotation of the readout: 0 hears ψ(x), 1 hears the momentum wave ψ̃(k), in between gives fractional-Fourier mixtures. Free (reuses the last FFT). |
 | **FFT** toggle | Freeze evolution and read ψ̃(k): the momentum spectrum becomes the audio. Very metallic/organ-like. |
 | **QM** toggle | Master switch for evolution. Off = the wave freezes mid-shape and the voice becomes a static wavetable. |
-| **Sample mode** combo | Which part of complex ψ becomes audio: Real / Imag / Magnitude / Phase. Magnitude = bright and buzzy; Phase = FM-like. |
+| **Sample mode** combo | Which part of complex ψ becomes audio: Real / Imag / Magnitude / Phase / PhononQND. Magnitude = bright and buzzy; Phase = FM-like; PhononQND = 8-step amplitude staircase (quantum non-demolition readout, clicks as ψ crosses levels). |
 
 ### POTENTIAL panel
 
@@ -135,6 +138,10 @@ Fractal. When Off, the whole section dims and is bypassed.
   (Power, Major, Minor, Sus4, Major7) use small-integer ratios; dissonant sets
   (Tritone, Cluster, Pythagorean) use large coprime ratios. Upper chord degrees
   get a velocity falloff.
+- **SUPERPOSE**: with CHORD on, each note sounds *two* competing voicings at once,
+  weighted cos²φ / sin²φ by a random phase. Releasing the key is a measurement: it
+  collapses to one winner (probability cos²φ) and kills the loser, so the same note
+  can resolve to a different harmony on every take. Off = the single selected voicing.
 - **PITCH**: global transpose ±2400 cents, applied as 2^(cents/1200).
 
 ---

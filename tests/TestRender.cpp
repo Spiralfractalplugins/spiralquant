@@ -45,14 +45,14 @@ int main (int argc = 1, char** argv = nullptr)
 
     for (int wt = 0; wt < 6; ++wt)
     for (int pt = 0; pt < 6; ++pt)
-    for (int sm = 0; sm < 4; ++sm)
+    for (int sm = 0; sm < 5; ++sm)
     {
         PluginProcessor proc;
         proc.prepareToPlay (48000.0, 512);
 
         if (auto* p = proc.apvts.getParameter ("waveType")) p->setValueNotifyingHost ((float) wt / 5.0f);
         if (auto* p = proc.apvts.getParameter ("potentialType")) p->setValueNotifyingHost ((float) pt / 5.0f);
-        if (auto* p = proc.apvts.getParameter ("sampleMode")) p->setValueNotifyingHost ((float) sm / 3.0f);
+        if (auto* p = proc.apvts.getParameter ("sampleMode")) p->setValueNotifyingHost ((float) sm / 4.0f);
         if (auto* p = proc.apvts.getParameter ("samplesPerTimestep")) p->setValueNotifyingHost (0.2f);
         if (auto* p = proc.apvts.getParameter ("applyWavefunction")) p->setValueNotifyingHost (1.0f);
 
@@ -200,6 +200,66 @@ int main (int argc = 1, char** argv = nullptr)
         const double rel = std::abs (ratios[0] - ratios[1]) / ratios[0];
         if (rel > 0.01)
         { std::cerr << "Parseval ratio not state-independent: " << ratios[0] << " vs " << ratios[1] << "\n"; return 1; }
+    }
+
+    // Phonon update: collapse jumps, quadrature readout, superposed chords.
+    {
+        auto render = [] (const std::vector<std::pair<const char*, float>>& settings, bool noteOffLate)
+        {
+            PluginProcessor proc;
+            proc.prepareToPlay (48000.0, 512);
+            proc.apvts.getParameter ("samplesPerTimestep")->setValueNotifyingHost (0.2f);
+            proc.apvts.getParameter ("release")->setValueNotifyingHost (0.0f); // 1 ms
+            for (const auto& s : settings)
+                if (auto* p = proc.apvts.getParameter (s.first))
+                    p->setValueNotifyingHost (s.second);
+
+            juce::MidiBuffer midi;
+            midi.addEvent (juce::MidiMessage::noteOn (1, 60, (juce::uint8) 100), 0);
+            juce::AudioBuffer<float> buffer (2, 512);
+            proc.processBlock (buffer, midi);
+            for (int b = 0; b < 16; ++b)
+            {
+                juce::MidiBuffer m;
+                if (noteOffLate && b == 8)
+                    m.addEvent (juce::MidiMessage::noteOff (1, 60, (juce::uint8) 64), 0);
+                proc.processBlock (buffer, m);
+            }
+            return std::vector<float> (buffer.getReadPointer (0), buffer.getReadPointer (0) + 512);
+        };
+
+        auto stats = [] (const std::vector<float>& v) -> std::pair<double, int>
+        {
+            double rms = 0.0;
+            for (float x : v)
+            {
+                if (! std::isfinite (x)) return { -1.0, 0 };
+                rms += (double) x * x;
+            }
+            return { std::sqrt (rms / (double) v.size()), 0 };
+        };
+
+        const auto base = render ({}, false);
+        if (stats (base).first <= 0.0) { std::cerr << "baseline silent\n"; return 1; }
+
+        // (a) collapse: perturbs the wave, stays finite, reproducible across instances.
+        const auto jump = render ({ { "jumpRate", 1.0f } }, false);
+        const auto jump2 = render ({ { "jumpRate", 1.0f } }, false);
+        if (stats (jump).first <= 0.0) { std::cerr << "collapse silent or NaN\n"; return 1; }
+        if (jump != jump2) { std::cerr << "collapse not reproducible\n"; return 1; }
+        if (jump == base) { std::cerr << "collapse had no effect\n"; return 1; }
+
+        // (b) quadrature rotation and PhononQND staircase change the readout.
+        const auto quad = render ({ { "frftAngle", 0.5f } }, false);
+        if (quad == base || stats (quad).first <= 0.0) { std::cerr << "quadrature readout broken\n"; return 1; }
+        const auto qnd = render ({ { "sampleMode", 1.0f } }, false); // normalised 1.0 = index 4
+        if (qnd == base || stats (qnd).first <= 0.0) { std::cerr << "PhononQND readout broken\n"; return 1; }
+
+        // (c) superposition: sounds while held, every voice stops after the collapse.
+        const auto supOn = render ({ { "chordMode", 1.0f }, { "chordSuperpose", 1.0f } }, false);
+        if (stats (supOn).first <= 0.0) { std::cerr << "superpose silent\n"; return 1; }
+        const auto supOff = render ({ { "chordMode", 1.0f }, { "chordSuperpose", 1.0f } }, true);
+        if (stats (supOff).first > 0.0) { std::cerr << "superpose left a voice sounding after note-off\n"; return 1; }
     }
 
     if (argc > 1 && juce::String (argv[1]) == "--bench")

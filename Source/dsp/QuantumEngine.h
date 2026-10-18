@@ -1,5 +1,6 @@
 #pragma once
 #include <JuceHeader.h>
+#include <random>
 #include "QuantumVoice.h"
 #include "MasterFx.h"
 
@@ -15,7 +16,8 @@ public:
                     int waveType, float waveShift, float waveScale, float waveImpulse,
                     int potentialType, float potentialShift, float potentialScale, float potentialHeight,
                     int showFFT, int sampleMode, float timestepDelta, float samplesPerTimestep, bool applyWavefunction,
-                    bool chordOn = false, int chordType = 0, float pitchCents = 0.0f, bool tunnel = false);
+                    int chordMode = 0, int chordType = 0, float pitchCents = 0.0f, bool tunnel = false,
+                    float jumpRate = 0.0f, float quadrature = 0.0f);
     void setFxParams (int type, float depth, float rate, float feedback, float mix, float bits, float entropy, int soloMode);
 
     static constexpr int SCOPE_SIZE = QuantumOsc::SIZE;
@@ -29,9 +31,21 @@ private:
     QuantumVoice voices[MAX_VOICES];
     MasterFx fx;
     int voiceNote[MAX_VOICES] = { -1,-1,-1,-1,-1,-1,-1,-1 };
+    int voiceVariant[MAX_VOICES] = {};
     unsigned long long voiceAge[MAX_VOICES] = {};
     unsigned long long nextAge = 1;
     double sampleRate = 48000.0;
+
+    // Superposition chords: while a key is held the note lives in a weighted
+    // blend of two chord voicings; note-off measures it (collapse to one).
+    struct Superposition
+    {
+        int note = -1;
+        float w1 = 1.0f;   // probability amplitude of the selected chordType
+        int type2 = 0;     // the superposed alternative voicing
+    };
+    Superposition supers[4];
+    std::mt19937 rng { 4242u };
 
     // Double-buffered scope: audio thread fills the back slot then flips scopeSlot;
     // the UI reads the published slot without ever blocking the audio thread.
@@ -41,7 +55,7 @@ private:
     std::atomic<int> scopeSlot { 0 };
     std::atomic<unsigned> scopeSeq { 0 };
     std::atomic<int> uiNote { -1 };
-    bool chordMode = false;
+    int chordMode = 0;   // 0 off, 1 chord, 2 superposed chord
     int chordType = 0;
 
     void handleNoteOn (int note, int velocity);

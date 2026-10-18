@@ -2,6 +2,7 @@
 
 #include <JuceHeader.h>
 #include <complex>
+#include <random>
 
 /** Quantum wavefunction oscillator.
 
@@ -14,6 +15,9 @@ public:
     static constexpr int SIZE = 128;
     static constexpr float SIZE_F = (float) SIZE;
 
+    /** Per-instance RNG seed so the eight voices do not collapse in lockstep. */
+    QuantumOsc();
+
     void prepare (double sampleRateHz);
     void reset (int waveType, float waveShift, float waveScale, float waveImpulse,
                 int potentialType, float potentialShift, float potentialScale, float potentialHeight,
@@ -25,6 +29,10 @@ public:
     void setTunneling (bool enabled);
     bool hasTunneling() const { return tunnelOn; }
     void setApplyWavefunction (bool enabled) { applyWavefunction = enabled; }
+    /** Monte-Carlo-wavefunction phonon-emission rate (0 = unitary evolution). */
+    void setJumpRate (float rate) { jumpRate = juce::jlimit (0.0f, 1.0f, rate); }
+    /** Readout quadrature rotation: 0 = psi(x), 1 = psi(k). */
+    void setQuadrature (float q) { quadrature = juce::jlimit (0.0f, 1.0f, q); }
     void markTablesDirty() { tablesDirty = true; }
     void trigger ();
 
@@ -44,7 +52,9 @@ private:
     void computePotential();
     void rebuildTables();
     void doTimestep (float dt);
+    void maybeJump (float dt);
     inline std::complex<float> sampleWave (float index) const;
+    inline std::complex<float> sampleArray (const std::complex<float>* arr, float index) const;
     inline float toReal (std::complex<float> v) const;
 
     double sampleRate = 48000.0;
@@ -63,9 +73,14 @@ private:
     float preStartSteps = 4.0f;
     bool applyWavefunction = true;
     bool tunnelOn = false;
+    float jumpRate = 0.0f;
+    float quadrature = 0.0f;
+    std::mt19937 rng;
+    static unsigned instanceCounter;
 
     std::complex<float> psi[SIZE];
     std::complex<float> psiFFT[SIZE];
+    std::complex<float> jumpBuf[SIZE];
     float potential[SIZE];
     bool mask[SIZE];
     std::complex<float> potPhase[SIZE];   // exp(j * dt * potential[i])

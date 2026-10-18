@@ -6,6 +6,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- Phonon-collapse readout: `jumpRate` drives a Monte-Carlo quantum-trajectory
+  collapse (â ψ = (x/σ)ψ + σ·∂ψ/∂x) applied per evolution step, seeded per voice
+  for reproducible renders — stochastic "quantum jumps of sound".
+- Quadrature rotation `frftAngle`: blends the position-space sample with the
+  (already-computed, free) momentum-space one for fractional-Fourier timbres.
+- `PhononQND` sample mode: 8-step amplitude staircase — a quantum non-demolition
+  style readout that clicks as ψ crosses discrete levels.
+- Superposed chords (`chordSuperpose`): each note spawns two competing voicings
+  weighted cos²φ/sin²φ; note-off is a measurement that collapses to one winner
+  (probability cos²φ) and kills the loser, so a note resolves differently each take.
 - Master FX module: Off / Flanger / Phaser / Bitcrush / Fractal Entropy.
 - HUD UI redesign with panel layout, oscilloscope grid, knobs and value labels.
 - Screenshot preview in README.

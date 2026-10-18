@@ -27,22 +27,24 @@ void QuantumEngine::reset()
         voices[i].noteOff();
         voiceNote[i] = -1;
     }
+    for (auto& sp : supers)
+        sp.note = -1;
 }
 void QuantumEngine::setParams (float attack, float decay, float sustain, float release,
                     float filterFreq, float filterRes, float drive, float satMix, float gain,
                     int waveType, float waveShift, float waveScale, float waveImpulse,
                     int potentialType, float potentialShift, float potentialScale, float potentialHeight,
                     int showFFT, int sampleMode, float timestepDelta, float samplesPerTimestep, bool applyWavefunction,
-                    bool chordOn, int chordTypeSel, float pitchCents, bool tunnel)
+                    int chordModeSel, int chordTypeSel, float pitchCents, bool tunnel, float jumpRate, float quadrature)
 {
-    chordMode = chordOn;
+    chordMode = juce::jlimit (0, 2, chordModeSel);
     chordType = juce::jlimit (0, 7, chordTypeSel);
     for (int i = 0; i < MAX_VOICES; ++i)
         voices[i].setParams (attack, decay, sustain, release, filterFreq, filterRes, drive, satMix, gain,
                              waveType, waveShift, waveScale, waveImpulse,
                              potentialType, potentialShift, potentialScale, potentialHeight,
                              showFFT, sampleMode, timestepDelta, samplesPerTimestep, applyWavefunction,
-                             pitchCents, tunnel);
+                             pitchCents, tunnel, jumpRate, quadrature);
 }
 
 // Chord degrees as just-intonation ratios. Consonant chords use small
@@ -76,35 +78,93 @@ void QuantumEngine::setFxParams (int type, float depth, float rate, float feedba
 void QuantumEngine::handleNoteOn (int note, int velocity)
 {
     uiNote.store (note, std::memory_order_relaxed);
-    const int degrees = chordMode ? chordSize (chordType) : 1;
-    for (int d = 0; d < degrees; ++d)
+    bool superpose = chordMode == 2;
+    int type2 = 0;
+    float w1 = 1.0f;
+    Superposition* rec = nullptr;
+
+    if (superpose)
     {
-        int idx = -1;
-        for (int i = 0; i < MAX_VOICES; ++i)
-            if (! voices[i].isActive()) { idx = i; break; }
-        if (idx == -1)
+        for (auto& sp : supers)
+            if (sp.note == note) { rec = &sp; break; }
+        if (rec == nullptr)
         {
-            // steal oldest voice
-            unsigned long long oldest = nextAge;
-            int oldestIdx = 0;
-            for (int i = 0; i < MAX_VOICES; ++i)
-                if (voices[i].isActive() && voiceAge[i] < oldest) { oldest = voiceAge[i]; oldestIdx = i; }
-            idx = oldestIdx;
-            voices[idx].noteOff();
+            for (auto& sp : supers)
+                if (sp.note < 0) { rec = &sp; break; }
         }
-        const float velScale = 1.0f / (1.0f + 0.35f * (float) d);
-        voices[idx].noteOn (note, juce::jlimit (1, 127, juce::roundToInt ((float) velocity * velScale)),
-                            chordMode ? chordRatio (chordType, d) : 1.0f);
-        voiceNote[idx] = note;
-        voiceAge[idx] = nextAge++;
+        if (rec != nullptr)
+        {
+            std::uniform_real_distribution<float> uni (0.0f, 1.0f);
+            const float phi = uni (rng) * juce::MathConstants<float>::halfPi;
+            w1 = std::cos (phi);
+            rec->note = note;
+            rec->w1 = w1;
+            rec->type2 = (chordType + 1 + (int) (uni (rng) * 6.99f)) % 8; // != chordType
+            type2 = rec->type2;
+        }
+        else
+        {
+            superpose = false; // no tracking slot left: plain chord
+        }
+    }
+
+    for (int variant = 0; variant < (superpose ? 2 : 1); ++variant)
+    {
+        const int type = variant == 0 ? chordType : type2;
+        const float ampW = variant == 0 ? w1 : std::sqrt (1.0f - w1 * w1);
+        const int degrees = chordMode >= 1 ? chordSize (type) : 1;
+        for (int d = 0; d < degrees; ++d)
+        {
+            int idx = -1;
+            for (int i = 0; i < MAX_VOICES; ++i)
+                if (! voices[i].isActive()) { idx = i; break; }
+            if (idx == -1)
+            {
+                // steal oldest voice
+                unsigned long long oldest = nextAge;
+                int oldestIdx = 0;
+                for (int i = 0; i < MAX_VOICES; ++i)
+                    if (voices[i].isActive() && voiceAge[i] < oldest) { oldest = voiceAge[i]; oldestIdx = i; }
+                idx = oldestIdx;
+                voices[idx].noteOff();
+            }
+            const float velScale = (1.0f / (1.0f + 0.35f * (float) d))
+                                   * (superpose ? ampW : 1.0f);
+            voices[idx].noteOn (note, juce::jlimit (1, 127, juce::roundToInt ((float) velocity * velScale)),
+                                chordMode >= 1 ? chordRatio (type, d) : 1.0f);
+            voiceNote[idx] = note;
+            voiceVariant[idx] = variant;
+            voiceAge[idx] = nextAge++;
+        }
     }
 }
 
 void QuantumEngine::handleNoteOff (int note)
 {
-    for (int i = 0; i < MAX_VOICES; ++i)
-        if (voiceNote[i] == note && voices[i].isActive())
-            voices[i].noteOff();
+    Superposition* rec = nullptr;
+    for (auto& sp : supers)
+        if (sp.note == note) { rec = &sp; break; }
+
+    if (rec != nullptr)
+    {
+        // Measurement: the superposition collapses onto one voicing with
+        // probability |c|^2; the losing variant is cut, the winner releases.
+        std::uniform_real_distribution<float> uni (0.0f, 1.0f);
+        const int winner = uni (rng) < rec->w1 * rec->w1 ? 0 : 1;
+        for (int i = 0; i < MAX_VOICES; ++i)
+            if (voiceNote[i] == note && voices[i].isActive())
+            {
+                if (winner == voiceVariant[i]) voices[i].noteOff();
+                else voices[i].kill();
+            }
+        rec->note = -1;
+    }
+    else
+    {
+        for (int i = 0; i < MAX_VOICES; ++i)
+            if (voiceNote[i] == note && voices[i].isActive())
+                voices[i].noteOff();
+    }
 }
 
 void QuantumEngine::process (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi, bool running)

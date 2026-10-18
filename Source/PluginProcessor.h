@@ -74,6 +74,9 @@ private:
         std::atomic<float>* chordType;
         std::atomic<float>* pitchShift;
         std::atomic<float>* tunnel;
+        std::atomic<float>* chordSuperpose;
+        std::atomic<float>* jumpRate;
+        std::atomic<float>* frftAngle;
     };
 
     ParamCache makeParamCache() const;

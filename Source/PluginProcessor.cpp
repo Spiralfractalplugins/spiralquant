@@ -29,7 +29,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     params.push_back (flt ("potentialHeight", "Pot Height", 0.0f, 1.0f, 0.5f));
 
     params.push_back (bl ("showFFT", "Show FFT", false));
-    params.push_back (choice ("sampleMode", "Sample Mode", { "Real","Imag","Magnitude","Phase" }, 0));
+    params.push_back (choice ("sampleMode", "Sample Mode", { "Real","Imag","Magnitude","Phase","PhononQND" }, 0));
     params.push_back (flt ("timestepDelta", "Timestep", 0.001f, 0.2f, 0.01f));
     params.push_back (flt ("samplesPerTimestep", "Evol Rate", 0.1f, 64.0f, 8.0f));
     params.push_back (bl ("applyWavefunction", "Apply QM", true));
@@ -65,6 +65,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     // UI-only (appended last: host index stability). Not read on the audio thread.
     params.push_back (choice ("uiSkin", "UI Skin", { "Dark","SciFi Neon","Console" }, 0));
 
+    // Phonon update (appended at the very end: host index stability).
+    params.push_back (bl ("chordSuperpose", "Superpose Chords", false));
+    params.push_back (flt ("jumpRate", "Phonon Collapse", 0.0f, 1.0f, 0.0f));
+    params.push_back (flt ("frftAngle", "Quadrature Rotation", 0.0f, 1.0f, 0.0f));
+
     return { params.begin(), params.end() };
 }
 
@@ -86,7 +91,8 @@ PluginProcessor::ParamCache PluginProcessor::makeParamCache() const
              r ("filterFreq"), r ("filterRes"), r ("drive"), r ("satMix"), r ("gain"),
              r ("fxType"), r ("fxDepth"), r ("fxRate"), r ("fxFeedback"), r ("fxMix"),
              r ("fxBits"), r ("fxEntropy"), r ("fxSolo"),
-             r ("chordMode"), r ("chordType"), r ("pitchShift"), r ("tunnel") };
+             r ("chordMode"), r ("chordType"), r ("pitchShift"), r ("tunnel"),
+             r ("chordSuperpose"), r ("jumpRate"), r ("frftAngle") };
 }
 
 void PluginProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
@@ -117,10 +123,11 @@ void PluginProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
         static_cast<int> (params.sampleMode->load()),
         params.timestepDelta->load(), params.samplesPerTimestep->load(),
         params.applyWavefunction->load() >= 0.5f,
-        params.chordMode->load() >= 0.5f,
+        params.chordMode->load() >= 0.5f ? (params.chordSuperpose->load() >= 0.5f ? 2 : 1) : 0,
         static_cast<int> (params.chordType->load()),
         params.pitchShift->load(),
-        params.tunnel->load() >= 0.5f);
+        params.tunnel->load() >= 0.5f,
+        params.jumpRate->load(), params.frftAngle->load());
 
     engine.setFxParams (
         static_cast<int> (params.fxType->load()),
