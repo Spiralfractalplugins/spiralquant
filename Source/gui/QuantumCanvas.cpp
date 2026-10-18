@@ -59,7 +59,7 @@ void QuantumCanvas::updateHandles()
     const float waveX = cx + unitToXNorm (raw ("waveShift")->load()) * halfW;
     waveCenterH = { waveX, waveY };
     waveScaleH = { waveX + 12.0f + raw ("waveScale")->load() * (halfW * 0.35f), waveY };
-    potCeiling = waveY + 8.0f;
+    potCeiling = plot.getY() + plot.getHeight() * 0.55f;
     const float potSpan = potBase - potCeiling;
     potCenterH = { potX, potBase };
     potHeightH = { potX, potBase - potSpan * raw ("potentialHeight")->load() };
