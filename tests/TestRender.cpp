@@ -152,6 +152,88 @@ int main (int argc = 1, char** argv = nullptr)
         if (rms <= 0.0f) { std::cerr << "silent chord=" << chord << " ct=" << ct << " tunnel=" << tunnel << "\n"; return 1; }
     }
 
+    // Wave 3: Zeno / squeeze / EPR matrix — finite and non-silent for every combo.
+    for (int zn = 0; zn < 2; ++zn)
+    for (int sq = 0; sq < 3; ++sq)
+    for (int ent = 0; ent < 2; ++ent)
+    {
+        PluginProcessor proc;
+        proc.prepareToPlay (48000.0, 512);
+        proc.apvts.getParameter ("samplesPerTimestep")->setValueNotifyingHost (0.2f);
+        proc.apvts.getParameter ("zeno")->setValueNotifyingHost ((float) zn);
+        proc.apvts.getParameter ("squeeze")->setValueNotifyingHost ((float) sq / 2.0f);
+        proc.apvts.getParameter ("entangle")->setValueNotifyingHost ((float) ent);
+        if (ent != 0)
+        {
+            proc.apvts.getParameter ("jumpRate")->setValueNotifyingHost (0.5f);
+            proc.apvts.getParameter ("chordMode")->setValueNotifyingHost (1.0f);
+            proc.apvts.getParameter ("chordSuperpose")->setValueNotifyingHost (1.0f);
+        }
+
+        juce::MidiBuffer midi, idle;
+        midi.addEvent (juce::MidiMessage::noteOn (1, 60, (juce::uint8) 100), 0);
+        juce::AudioBuffer<float> buffer (2, 512);
+        float rms = 0.0f;
+        for (int b = 0; b < 16; ++b)
+        {
+            buffer.clear();
+            proc.processBlock (buffer, b == 0 ? midi : idle);
+            const float* d = buffer.getReadPointer (0);
+            for (int i = 0; i < 512; ++i)
+            {
+                if (! std::isfinite (d[i])) { std::cerr << "NaN wave3 zn=" << zn << " sq=" << sq << " ent=" << ent << "\n"; return 1; }
+                rms += d[i] * d[i];
+            }
+        }
+        rms = std::sqrt (rms / (512.0f * 16.0f));
+        if (rms <= 0.0f) { std::cerr << "silent wave3 zn=" << zn << " sq=" << sq << " ent=" << ent << "\n"; return 1; }
+    }
+
+    // Squeeze must physically reshape the packet: + squeezes position (variance
+    // drops), - squeezes momentum (position variance grows). Flat potential and
+    // slow evolution keep spreading out of the picture.
+    {
+        auto posVariance = [] (const float* pos, int n)
+        {
+            double tot = 0.0;
+            for (int i = 0; i < n; ++i) tot += (double) pos[i] * pos[i];
+            if (tot <= 0.0) return -1.0;
+            double mean = 0.0;
+            for (int i = 0; i < n; ++i) mean += i * ((double) pos[i] * pos[i]);
+            mean /= tot;
+            double var = 0.0;
+            for (int i = 0; i < n; ++i) { const double d = i - mean; var += d * d * ((double) pos[i] * pos[i]); }
+            return var / tot;
+        };
+
+        double vars [3] = { 0.0, 0.0, 0.0 };
+        for (int sq = 0; sq < 3; ++sq)
+        {
+            PluginProcessor proc;
+            proc.prepareToPlay (48000.0, 512);
+            proc.apvts.getParameter ("waveType")->setValueNotifyingHost (0.0f);
+            proc.apvts.getParameter ("potentialType")->setValueNotifyingHost (0.0f);
+            proc.apvts.getParameter ("samplesPerTimestep")->setValueNotifyingHost (1.0f);
+            proc.apvts.getParameter ("squeeze")->setValueNotifyingHost ((float) sq / 2.0f);
+
+            juce::MidiBuffer midi, idle;
+            midi.addEvent (juce::MidiMessage::noteOn (1, 60, (juce::uint8) 100), 0);
+            juce::AudioBuffer<float> buffer (2, 512);
+            for (int b = 0; b < 4; ++b)
+            {
+                buffer.clear();
+                proc.processBlock (buffer, b == 0 ? midi : idle);
+            }
+            float pos [QuantumEngine::SCOPE_SIZE], mom [QuantumEngine::SCOPE_SIZE], pot [QuantumEngine::SCOPE_SIZE];
+            proc.snapshotScope (pos, mom, pot);
+            vars [sq] = posVariance (pos, QuantumEngine::SCOPE_SIZE);
+            if (vars [sq] < 0.0) { std::cerr << "squeeze scope empty\n"; return 1; }
+        }
+        if (! (vars [2] < vars [1] && vars [0] > vars [1]))
+        { std::cerr << "squeeze did not reshape variance: neg=" << vars [0]
+                    << " zero=" << vars [1] << " pos=" << vars [2] << "\n"; return 1; }
+    }
+
     // Scope snapshot: finiteness + Parseval. JUCE's forward FFT uses a fixed
     // scaling convention, so instead of pinning the absolute ratio we assert it
     // lands in a sane band and is identical for two different wavefunctions.
