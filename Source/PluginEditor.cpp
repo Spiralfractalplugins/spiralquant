@@ -31,6 +31,7 @@ namespace
     using Fn = ValueSlider::FormatFn;
 
     Fn percent   = [] (double v) { return juce::String (juce::roundToInt (v * 100.0)) + "%"; };
+    Fn signedPercent = [] (double v) { return (v >= 0.0 ? "+" : "") + juce::String (juce::roundToInt (v * 100.0)) + "%"; };
     Fn msText    = [] (double v) { return juce::String (juce::roundToInt (v)) + " ms"; };
     Fn hzText    = [] (double v) { if (v >= 1000.0) return juce::String (v / 1000.0, 1) + " kHz";
                                    return juce::String (juce::roundToInt (v)) + " Hz"; };
@@ -96,8 +97,9 @@ PluginEditor::PluginEditor (PluginProcessor& p)
     tunnelChip.setButtonText ("TUNNEL");
     superposeChip.setButtonText ("SUPERPOSE");
     walkChip.setButtonText ("WALK");
+    eprChip.setButtonText ("EPR");
     limiterChip.setButtonText ("LIMIT");
-    for (auto* b : { &showFFT, &applyQm, &chordChip, &tunnelChip, &superposeChip, &walkChip, &limiterChip })
+    for (auto* b : { &showFFT, &applyQm, &chordChip, &tunnelChip, &superposeChip, &walkChip, &limiterChip, &eprChip })
         addAndMakeVisible (*b);
     showFFT.setTooltip ("Freeze evolution and read the momentum-domain (FFT) wave.");
     applyQm.setTooltip ("Master switch for real-time Schrodinger evolution. Off freezes the wave.");
@@ -105,6 +107,7 @@ PluginEditor::PluginEditor (PluginProcessor& p)
     tunnelChip.setTooltip ("Quantum tunneling: the wavefunction leaks through potential barriers.");
     superposeChip.setTooltip ("Chord superposition: each note holds two voicings at once; note-off measures (collapses) it to one.");
     walkChip.setTooltip ("Quantum random walk: the engine composes its own melody, measuring a Hadamard walk over pentatonic degrees at every tick.");
+    eprChip.setTooltip ("Entangled voices: a quantum jump on one voice instantly collapses its partners sharing the same note (needs COLLAPSE > 0).");
     limiterChip.setTooltip ("Output limiter: pulls peaks above -1 dBFS down with a fast attack and slow release, so chords and drive can never spike the volume.");
 
     sampleMode.addItemList ({ "Real","Imag","Magnitude","Phase","PhononQND" }, 1);
@@ -132,7 +135,9 @@ PluginEditor::PluginEditor (PluginProcessor& p)
             { "timestepDelta","DT",      "Schrodinger evolution step dt. Smaller = smoother wave, more CPU.", dtText },
             { "samplesPerTimestep", "STEP", "Audio samples between evolution steps. Lower = faster wave.", stepText },
             { "jumpRate",   "COLLAPSE", "Phonon-collapse rate: random quantum jumps squeeze the wave (Monte-Carlo wavefunction).", percent },
-            { "frftAngle",  "QUAD",     "Quadrature rotation of the readout: 0 reads psi(x), 1 reads the momentum state psi(k).", percent } } },
+            { "frftAngle",  "QUAD",     "Quadrature rotation of the readout: 0 reads psi(x), 1 reads the momentum state psi(k).", percent },
+            { "zeno",       "ZENO",     "Quantum Zeno effect: frequent position measurements freeze the wave's evolution.", percent },
+            { "squeeze",    "SQUEEZE",  "Squeezed states: positive narrows the wave in space (wider in k), negative narrows it in momentum.", signedPercent } } },
         { Group::Potential, {
             { "potentialShift",  "CENTER", "Where the potential sits.", percent },
             { "potentialScale",  "WIDTH",  "Barrier width / curvature.", percent },
@@ -174,6 +179,7 @@ PluginEditor::PluginEditor (PluginProcessor& p)
     tunnelAtt   = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (processor.apvts, "tunnel", tunnelChip);
     walkAtt     = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (processor.apvts, "walkOn", walkChip);
     limiterAtt  = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (processor.apvts, "limiter", limiterChip);
+    eprAtt      = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (processor.apvts, "entangle", eprChip);
     sampleModeAtt = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (processor.apvts, "sampleMode", sampleMode);
     fxTypeAtt     = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (processor.apvts, "fxType", fxType);
     fxSoloAtt     = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (processor.apvts, "fxSolo", fxSolo);
@@ -291,7 +297,7 @@ void PluginEditor::resized()
         showFFT.setBounds (r.removeFromLeft ((int) (52 * uiScale)).reduced (2));
         applyQm.setBounds (r.removeFromLeft ((int) (56 * uiScale)).reduced (2));
         sampleMode.setBounds (r.removeFromRight ((int) (116 * uiScale)).reduced (2));
-    }, { "waveShift", "waveScale", "waveImpulse", "timestepDelta", "samplesPerTimestep", "jumpRate", "frftAngle" });
+    }, { "waveShift", "waveScale", "waveImpulse", "timestepDelta", "samplesPerTimestep", "jumpRate", "frftAngle", "zeno", "squeeze" });
 
     layoutPanel (potArea, true, [this] (juce::Rectangle<int> r) {
         potentialTypeChip.setBounds (r.removeFromLeft (juce::jmin (r.getWidth() - 120, (int) (160 * uiScale))).reduced (2));
@@ -315,6 +321,7 @@ void PluginEditor::resized()
         chordType.setBounds (h.removeFromLeft ((int) (140 * uiScale)).reduced (2));
         superposeChip.setBounds (h.removeFromLeft ((int) (112 * uiScale)).reduced (2));
         walkChip.setBounds (h.removeFromLeft ((int) (70 * uiScale)).reduced (2));
+        eprChip.setBounds (h.removeFromLeft ((int) (58 * uiScale)).reduced (2));
         for (const char* id : { "pitchShift", "walkRate" })
         {
             auto knobCell = h.withWidth (juce::jmin (h.getWidth(), (int) (90 * uiScale)));
@@ -358,8 +365,9 @@ void PluginEditor::applySkin()
     chordChip.setColour (juce::ToggleButton::tickColourId, accentFor (Group::Harmony));
     superposeChip.setColour (juce::ToggleButton::tickColourId, accentFor (Group::Harmony));
     walkChip.setColour (juce::ToggleButton::tickColourId, accentFor (Group::Harmony));
+    eprChip.setColour (juce::ToggleButton::tickColourId, accentFor (Group::Harmony));
     limiterChip.setColour (juce::ToggleButton::tickColourId, accentFor (Group::Fx));
-    for (auto* b : { &showFFT, &applyQm, &tunnelChip, &chordChip, &superposeChip, &walkChip, &limiterChip })
+    for (auto* b : { &showFFT, &applyQm, &tunnelChip, &chordChip, &superposeChip, &walkChip, &limiterChip, &eprChip })
         b->setColour (juce::ToggleButton::textColourId, pal.text);
 
     for (auto& k : knobs)
@@ -416,6 +424,13 @@ void PluginEditor::timerCallback()
         chordType.setAlpha (chordOn ? 1.0f : 0.45f);
         chordType.setEnabled (chordOn);
         superposeChip.setAlpha (chordOn ? 1.0f : 0.45f);
+    }
+
+    const bool jumpsOn = processor.apvts.getRawParameterValue ("jumpRate")->load() > 0.0f;
+    if (eprChip.isEnabled() != jumpsOn)
+    {
+        eprChip.setAlpha (jumpsOn ? 1.0f : 0.45f);
+        eprChip.setEnabled (jumpsOn);
     }
 }
 

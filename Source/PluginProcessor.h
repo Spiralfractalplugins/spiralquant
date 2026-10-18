@@ -83,6 +83,9 @@ private:
         std::atomic<float>* walkOn;
         std::atomic<float>* walkRate;
         std::atomic<float>* limiter;
+        std::atomic<float>* zeno;
+        std::atomic<float>* entangle;
+        std::atomic<float>* squeeze;
     };
 
     ParamCache makeParamCache() const;

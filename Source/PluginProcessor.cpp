@@ -81,6 +81,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     // Output limiter (appended at the very end: host index stability).
     params.push_back (bl ("limiter", "Output Limiter", true));
 
+    // Wave 3: Zeno measurement, EPR entanglement, squeezed states (appended at
+    // the very end: host index stability).
+    params.push_back (flt ("zeno", "Zeno Measurement", 0.0f, 1.0f, 0.0f));
+    params.push_back (bl ("entangle", "Entangle Voices", false));
+    params.push_back (flt ("squeeze", "Squeeze", -1.0f, 1.0f, 0.0f));
+
     return { params.begin(), params.end() };
 }
 
@@ -105,7 +111,7 @@ PluginProcessor::ParamCache PluginProcessor::makeParamCache() const
              r ("chordMode"), r ("chordType"), r ("pitchShift"), r ("tunnel"),
              r ("chordSuperpose"), r ("jumpRate"), r ("frftAngle"),
              r ("memoryAmt"), r ("memoryTime"), r ("ringdown"), r ("walkOn"), r ("walkRate"),
-             r ("limiter") };
+             r ("limiter"), r ("zeno"), r ("entangle"), r ("squeeze") };
 }
 
 void PluginProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
@@ -143,7 +149,8 @@ void PluginProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
         params.jumpRate->load(), params.frftAngle->load(),
         params.memoryAmt->load(), params.memoryTime->load(), params.ringdown->load(),
         params.walkOn->load() >= 0.5f, params.walkRate->load(),
-        params.limiter->load() >= 0.5f);
+        params.limiter->load() >= 0.5f,
+        params.zeno->load(), params.entangle->load() >= 0.5f, params.squeeze->load());
 
     engine.setFxParams (
         static_cast<int> (params.fxType->load()),
