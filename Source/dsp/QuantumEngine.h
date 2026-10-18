@@ -19,7 +19,8 @@ public:
                     int chordMode = 0, int chordType = 0, float pitchCents = 0.0f, bool tunnel = false,
                     float jumpRate = 0.0f, float quadrature = 0.0f,
                     float memoryAmt = 0.0f, float memoryTimeMs = 80.0f, float ringdown = 0.0f,
-                    bool walkOn = false, float walkRateHz = 2.0f, bool limiter = true);
+                    bool walkOn = false, float walkRateHz = 2.0f, bool limiter = true,
+                    float zeno = 0.0f, bool entangle = false, float squeeze = 0.0f);
     void setFxParams (int type, float depth, float rate, float feedback, float mix, float bits, float entropy, int soloMode);
 
     static constexpr int SCOPE_SIZE = QuantumOsc::SIZE;
