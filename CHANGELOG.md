@@ -63,12 +63,32 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   panel height) and can no longer overlap the |ψ(x)| curve.
 
 ### Changed
+- Harmony `PITCH` knob spans −48 … +48 st (±4800 cents, four octaves either way)
+  and reads in semitones; the voice clamps the resulting frequency to the
+  renderable band so extreme transposition stays useful instead of aliasing.
+- Fractal master FX is a tonal tail, not a noise generator: white-noise injection
+  and the >1 chaos gain boost are gone. The tent map now picks a comb length that
+  is a whole number of tonic periods (the engine hands the playing note's root,
+  transposed, to the FX), and steers the tail's brightness. Wet gain is
+  normalised by (1 − feedback) and trimmed so dry + wet peaks at unity; the
+  render suite asserts the effect can no longer be louder than the dry signal.
+- Preset recall applies every parameter in the file and the browser dropdown
+  recalls on selection (`LOAD` re-applies). Factory bank grew to 18 presets, each
+  carrying the full parameter set.
 - `applyWavefunction` (QM toggle) now freezes wavefunction evolution when off
   instead of being ignored.
 - Choice-chip captions read from APVTS parameter names, so host-visible
   `InfiniteWell` label and UI can no longer desynchronize.
 - Scope data is snapshotted lock-free; the UI reader never blocks the audio
   thread.
+
+### Fixed
+- Recalling a preset did nothing: the browser read JSON keys off the top level
+  (`format`, `name`, `params`) instead of the `params` object, so no parameter ID
+  ever matched. Saving was empty for the same reason — it walked the ValueTree's
+  own properties instead of the per-parameter `PARAM` children.
+- Factory presets now cover the wave-2/3 parameters, so switching presets is
+  deterministic instead of leaving old FX and harmony settings behind.
 
 ### Removed
 - Dead legacy widgets (Gate/Sequence editors, ScopeComponent, KnobSlider,

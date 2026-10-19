@@ -47,3 +47,4 @@ vendor/
 dist/*
 !dist/README.md
 .licenses/
+docs/marketing/product-card.png

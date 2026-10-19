@@ -12,7 +12,7 @@ double well…), and hear the wave slosh, reflect, interfere with itself and
 - Real-time quantum evolution at audio rates — the interference *is* the timbre
 - 6 wave shapes × 6 potentials × 4 readout modes (Re/Im/|ψ|/phase) + momentum-FFT audio
 - Quantum tunnelling (Gamow transparency) for evolving shimmering tails
-- Just-intonation chord mode, ±24 octaves of cents detune, ADSR, filter, drive, 6 master FX
+- Just-intonation chord mode, ±48 semitones of transposition (±4 octaves), ADSR, filter, drive, 4 master FX
 - Live scope of |ψ(x)| **and** |ψ̃(k)| spectrum fed by the actual DSP — never a fake animation
 - 3 skins (Dark / SciFi Neon / Console), scalable UI, preset browser
 - VST3 + AU + Standalone, macOS universal / Windows / Linux

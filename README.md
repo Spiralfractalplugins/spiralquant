@@ -36,7 +36,7 @@ a split-step Fourier method on a 128-point grid.
 - **Chord mode**: each key triggers a just-intonation voicing — consonant chords
   (Power, Major, Minor, Sus4, Major 7th) and dissonant ones (Tritone, Cluster,
   Pythagorean); extra degrees get a velocity falloff.
-- **Pitch shift**: ±2400 cents applied as `f · 2^(cents/1200)` at note start and
+- **Pitch shift**: ±48 st (±4800 cents) applied as `f · 2^(cents/1200)` at note start and
   on every change.
 - **Tunneling**: Gamow transparency `T = exp(-2κL)` leaks the wave through the
   potential barrier instead of hard-reflecting it (κ from `√(2m(V−E))`).
@@ -78,7 +78,7 @@ a split-step Fourier method on a 128-point grid.
 | `fxEntropy`          | float    | 0.0 – 1.0                                     | 0.5     |
 | `chordMode`          | bool     | —                                             | false   |
 | `chordType`          | choice   | Power / Major / Minor / Sus4 / Major7 / Tritone / Cluster / Pythagorean | 1 (Major) |
-| `pitchShift`         | float    | -2400 – +2400 cents                           | 0       |
+| `pitchShift`         | float    | -48 – +48 st (±4800 cents)                    | 0       |
 | `tunnel`             | bool     | —                                             | false   |
 | `uiSkin`             | choice   | Dark / SciFi Neon / Console (UI only)         | 0 (Dark) |
 | `chordSuperpose`     | bool     | — (chords in quantum superposition)           | false   |
@@ -152,7 +152,7 @@ a plain wavetable of that frozen state.
 per-note frequency glide), a resonant low-pass (Q from `filterRes`), cubic
 soft-clip saturation driven by `drive`/`satMix`, and per-voice `gain`.
 Chord mode clones a note into a just-intonation voicing with velocity falloff on
-upper degrees; `pitchShift` transposes all voices by 2^(cents/1200).
+upper degrees; `pitchShift` transposes all voices by 2^(st/12) across ±48 semitones.
 
 **Phonon collapse (`jumpRate`).** With the rate above zero, each evolution step also
 runs a Monte-Carlo quantum-trajectory measurement: the phonon-annihilation operator
@@ -222,8 +222,10 @@ consistent state together, like correlated EPR outcomes. No cascade: the forced
 collapse never re-triggers propagation.
 
 **6. Master section.** Up to 8 voices are summed, then a master effect
-(Flanger/Phaser via JUCE, or custom Bitcrush/Fractal-chaos) with dry/wet solo,
-and the stereo pair is written to the bus.
+(Flanger/Phaser via JUCE, custom Bitcrush, or Fractal — a level-normalised feedback
+comb whose length is a whole number of tonic periods, so the tail rings on the
+playing note instead of hissing) with dry/wet solo, and the stereo pair is written
+to the bus.
 
 The UI scope shows the same data the audio uses: `|ψ(x)|` from the first active
 voice on top, and the momentum spectrum `|ψ̃(k)|` with a harmonic grid (bin n =
@@ -299,7 +301,7 @@ See [How it works](docs/HOW_IT_WORKS.md) for the signal path and sound generatio
 
 ## Presets
 
-Preset I/O is implemented in `Source/Presets.cpp` using a small JSON format
+Preset I/O lives in `Source/gui/PresetBrowser.h` using a small JSON format
 (`PresetFormat`, version 1):
 
 ```json
@@ -314,7 +316,10 @@ Preset I/O is implemented in `Source/Presets.cpp` using a small JSON format
 ```
 
 `presets/` is embedded at build time (when populated); an empty folder produces
-no factory presets and no errors.
+no factory presets and no errors. Eighteen factory presets ship with the plug-in
+(`01_Init` … `18_Momentum_Readout`); picking one from the browser dropdown recalls
+it immediately, `LOAD` re-applies the current selection, `SAVE` writes every
+parameter to a user preset in app-support.
 
 ## Project layout
 

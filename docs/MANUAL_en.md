@@ -133,7 +133,12 @@ Fractal. When Off, the whole section dims and is bypassed.
 | FDBK | Feedback |
 | MIX | Dry/wet |
 | BITS | Bitcrush resolution (2–16 bit) |
-| CHAOS | Fractal entropy of the chaos effect |
+| CHAOS | Fractal entropy: how bright the tail rings and how far the comb wanders |
+
+**Fractal** is a tonal tail, not a noise generator: the chaos map picks a feedback
+comb whose length is a whole number of periods of the note you are playing, so the
+wet signal reinforces the tonic and its harmonics. Its level is normalised by
+feedback, so the effect never gets louder than the dry mix.
 
 **Solo** selects Full / Dry-only / Wet-only output.
 
@@ -151,7 +156,7 @@ Fractal. When Off, the whole section dims and is bypassed.
   weighted cos²φ / sin²φ by a random phase. Releasing the key is a measurement: it
   collapses to one winner (probability cos²φ) and kills the loser, so the same note
   can resolve to a different harmony on every take. Off = the single selected voicing.
-- **PITCH**: global transpose ±2400 cents, applied as 2^(cents/1200).
+- **PITCH**: global transpose ±48 st (±4800 cents), applied as 2^(cents/1200).
 - **WALK**: the plugin composes its own melody. A continuous-time quantum walk
   runs on a 16-node ring (two-octave pentatonic); each measurement tick the
   walker's position — sampled with Born probabilities — becomes a note, velocity
@@ -170,10 +175,12 @@ Fractal. When Off, the whole section dims and is bypassed.
 
 ## 5. Presets
 
-- The header combo lists factory presets (embedded at build time) and your own.
-- **LOAD** applies the selected preset; **SAVE** writes a `.sp303preset` JSON to
+- The header combo lists 18 factory presets (embedded at build time) and your own.
+  Picking one from the list recalls it straight away.
+- **LOAD** re-applies the selected preset; **SAVE** writes a `.sp303preset` JSON to
   the app-support folder; **DEL** removes a user preset.
-- Presets store all parameters *including the UI skin*.
+- Presets store all parameters *including the UI skin*, so recalling one leaves
+  nothing of the previous sound behind.
 
 ## 6. Skins
 
