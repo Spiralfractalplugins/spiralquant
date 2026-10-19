@@ -72,6 +72,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   transposed, to the FX), and steers the tail's brightness. Wet gain is
   normalised by (1 − feedback) and trimmed so dry + wet peaks at unity; the
   render suite asserts the effect can no longer be louder than the dry signal.
+- Fractal `DEPTH` decides how wide that tap corridor is — two tonic periods at the
+  bottom of the knob, eight at the top — instead of the tail being pinned to 1–3.
+  The delay line grew to 0.5 s so whole-period taps still fit at the bottom of the
+  keyboard; the corridor narrows to match when they would not.
 - Preset recall applies every parameter in the file and the browser dropdown
   recalls on selection (`LOAD` re-applies). Factory bank grew to 18 presets, each
   carrying the full parameter set.
@@ -89,6 +93,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   own properties instead of the per-parameter `PARAM` children.
 - Factory presets now cover the wave-2/3 parameters, so switching presets is
   deterministic instead of leaving old FX and harmony settings behind.
+- The Fractal chaos map is a tent map on [0, 1] again. `1 − 2·|2x − 1|` leaves the
+  unit interval, ran away toward negative infinity and left the comb stuck on a
+  single period, which made the tap corridor — and `DEPTH` with it — inert.
 
 ### Removed
 - Dead legacy widgets (Gate/Sequence editors, ScopeComponent, KnobSlider,
