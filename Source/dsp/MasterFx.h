@@ -7,6 +7,9 @@ public:
     void prepare (double sampleRateHz);
     void reset();
     void setParams (int type, float depth, float rate, float feedback, float mix, float bits, float entropy, int soloMode);
+    /** Harmonic reference for the Fractal effect, in Hz. Values <= 0 keep the
+        last reference, so the tail keeps ringing around the previous tonic. */
+    void setReferenceHz (float hz);
     void process (juce::AudioBuffer<float>& buffer);
 
 private:
@@ -30,11 +33,15 @@ private:
     int holdPeriod = 1;
 
     float chaosState = 0.37f;
-    float fractalAcc = 0.0f;
-    std::uint32_t rngState = 0x9e3779b9u;
     juce::AudioBuffer<float> scratch;
 
-    float nextNoise();
+    // Fractal: a feedback comb tuned to whole periods of the tonic, so the
+    // recirculating tail reinforces f0 and its harmonics instead of hissing.
+    float refHz = 220.0f;
+    juce::AudioBuffer<float> fractalLine;
+    int fractalMax = 0;
+    int fractalWrite = 0;
+    float fractalLp [2] { 0.0f, 0.0f };
 
     void processBitcrush (juce::AudioBuffer<float>& buffer);
     void processFractal (juce::AudioBuffer<float>& buffer);

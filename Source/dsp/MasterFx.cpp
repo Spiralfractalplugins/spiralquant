@@ -10,6 +10,11 @@ void MasterFx::prepare (double sampleRateHz)
 
     chorus.prepare (spec);
     phaser.prepare (spec);
+
+    fractalMax = juce::jmax (1024, (int) (sampleRate * 0.25));
+    fractalLine.setSize (2, fractalMax);
+    fractalLine.clear();
+
     reset();
 }
 
@@ -23,7 +28,11 @@ void MasterFx::reset()
     heldR = 0.0f;
     holdPeriod = 1;
     chaosState = 0.37f;
-    fractalAcc = 0.0f;
+    fractalWrite = 0;
+    fractalLp [0] = 0.0f;
+    fractalLp [1] = 0.0f;
+    if (fractalMax > 0)
+        fractalLine.clear();
 }
 
 void MasterFx::setParams (int t, float d, float r, float fb, float m, float b, float e, int s)
@@ -51,6 +60,12 @@ void MasterFx::setParams (int t, float d, float r, float fb, float m, float b, f
     phaser.setCentreFrequency (800.0f + depth * 2400.0f);
     phaser.setFeedback (feedback);
     phaser.setMix (mix);
+}
+
+void MasterFx::setReferenceHz (float hz)
+{
+    if (std::isfinite (hz) && hz > 20.0f && hz < 20000.0f)
+        refHz = hz;
 }
 
 void MasterFx::process (juce::AudioBuffer<float>& buffer)
@@ -144,56 +159,56 @@ void MasterFx::processBitcrush (juce::AudioBuffer<float>& buffer)
     }
 }
 
-float MasterFx::nextNoise()
-{
-    // xorshift32: ~3 ops per sample, no shared global state
-    rngState ^= rngState << 13;
-    rngState ^= rngState >> 17;
-    rngState ^= rngState << 5;
-    return ((float) (rngState >> 8) / 8388608.0f) - 0.5f; // [-0.5, 0.5)
-}
-
 void MasterFx::processFractal (juce::AudioBuffer<float>& buffer)
 {
     const int numSamples = buffer.getNumSamples();
-    const float lfoInc = (juce::MathConstants<float>::twoPi * rate) / (float) sampleRate;
-    const int period = 1 + (int) std::round (depth * 12.0f);
+    const int numChannels = juce::jmin (2, buffer.getNumChannels());
+    if (numSamples <= 0 || numChannels <= 0 || fractalMax <= 0)
+        return;
 
-    float* l = buffer.getWritePointer (0);
-    float* r = buffer.getWritePointer (1);
+    // Chaos moves the *harmonic content*, never the level: the tent map picks a
+    // comb length that is a whole number of tonic periods and steers the tail's
+    // brightness. Wet gain is normalised by (1 - feedback) and trimmed, so this
+    // path can only ever be quieter than the dry signal.
+    lfoPhase += (juce::MathConstants<float>::twoPi * rate * (float) numSamples) / (float) sampleRate;
+    if (lfoPhase > juce::MathConstants<float>::twoPi)
+        lfoPhase -= juce::MathConstants<float>::twoPi;
 
-    const float levelsF = (float) (1 << (int) std::round (juce::jlimit (2.0f, 16.0f, bits)));
-    const float invLevels = 1.0f / levelsF;
-    const float dryWet = 1.0f - mix;
-    const float noiseAmp = entropyAmount * 0.04f;
+    chaosState = 1.0f - 2.0f * std::fabs (2.0f * chaosState - 1.0f);
+    if (! std::isfinite (chaosState)) chaosState = 0.37f;
 
-    for (int i = 0; i < numSamples; ++i)
+    const int tapPeriods = 1 + (int) (chaosState * 2.999f);          // 1..3 tonic periods
+    const float tonicPeriod = (float) sampleRate / refHz;
+    const int delay = juce::jlimit (1, fractalMax - 1,
+                                    (int) std::lround (tonicPeriod * (float) tapPeriods));
+
+    const int levels = 1 << juce::roundToInt (juce::jlimit (5.0f, 14.0f, bits));
+    const float invLevels = 1.0f / (float) levels;
+    const float fb = juce::jlimit (0.0f, 0.85f, feedback);
+    const float dryWet = 1.0f - mix * 0.35f;
+    const float wetWet = mix * 0.35f * (1.0f - fb);
+    // Entropy opens the tail: low chaos keeps it dark and consonant, high chaos
+    // lets the upper harmonics of the tonic ring.
+    const float lpCoef = juce::jlimit (0.01f, 0.9f, 0.12f + entropyAmount * 0.7f);
+
+    for (int ch = 0; ch < numChannels; ++ch)
     {
-        if (holdCounter >= (float) period)
+        float* d = buffer.getWritePointer (ch);
+        float* line = fractalLine.getWritePointer (ch);
+        float& lp = fractalLp [ch];
+
+        for (int i = 0; i < numSamples; ++i)
         {
-            heldL = std::round (l[i] * levelsF) * invLevels;
-            heldR = std::round (r[i] * levelsF) * invLevels;
-            holdCounter = 0.0f;
+            const int readIdx = (fractalWrite - delay + fractalMax) % fractalMax;
+            const float quantised = std::round (d[i] * (float) levels) * invLevels;
+            float out = quantised + fb * line[readIdx];
+            if (! std::isfinite (out)) out = 0.0f;
+
+            line[fractalWrite] = out;
+            fractalWrite = (fractalWrite + 1) % fractalMax;
+
+            lp += lpCoef * (out - lp);
+            d[i] = d[i] * dryWet + lp * wetWet;
         }
-        ++holdCounter;
-
-        // tent map chaos
-        chaosState = 1.0f - 2.0f * std::fabs (2.0f * chaosState - 1.0f);
-        if (! std::isfinite (chaosState)) chaosState = 0.37f;
-
-        lfoPhase += lfoInc;
-        if (lfoPhase > juce::MathConstants<float>::twoPi)
-            lfoPhase -= juce::MathConstants<float>::twoPi;
-
-        const float chaosMod = 1.0f + entropyAmount * (chaosState - 0.5f) * 0.8f;
-        const float wobble = 1.0f + 0.25f * entropyAmount * std::sin (lfoPhase * 3.7f);
-        const float gainMod = chaosMod * wobble;
-        const float rndL = nextNoise() * noiseAmp;
-        const float rndR = nextNoise() * noiseAmp;
-
-        const float dryL = l[i];
-        const float dryR = r[i];
-        l[i] = dryL * dryWet + (heldL * gainMod + rndL) * mix;
-        r[i] = dryR * dryWet + (heldR * gainMod + rndR) * mix;
     }
 }

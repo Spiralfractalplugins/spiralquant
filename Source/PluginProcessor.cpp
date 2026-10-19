@@ -59,7 +59,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     params.push_back (bl ("chordMode", "Chord Mode", false));
     params.push_back (choice ("chordType", "Chord Type",
         { "Power","Major","Minor","Sus4","Major7","Tritone","Cluster","Pythagorean" }, 1));
-    params.push_back (flt ("pitchShift", "Pitch Shift", -2400.0f, 2400.0f, 0.0f));
+    params.push_back (flt ("pitchShift", "Pitch Shift", -4800.0f, 4800.0f, 0.0f));
     params.push_back (bl ("tunnel", "Tunneling", false));
 
     // UI-only (appended last: host index stability). Not read on the audio thread.

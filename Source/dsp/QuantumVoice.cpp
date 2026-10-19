@@ -65,7 +65,7 @@ void QuantumVoice::setParams (float a, float d, float s, float r,
     satMix = juce::jlimit (0.0f, 1.0f, sm);
     gain = juce::jlimit (0.0f, 2.0f, g);
 
-    const float clampedCents = juce::jlimit (-2400.0f, 2400.0f, cents);
+    const float clampedCents = juce::jlimit (-4800.0f, 4800.0f, cents);
     if (clampedCents != pitchCents)
     {
         pitchCents = clampedCents;

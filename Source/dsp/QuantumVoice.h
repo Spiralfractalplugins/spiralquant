@@ -65,7 +65,13 @@ private:
     float pitchCents = 0.0f;
     float noteRatio = 1.0f;
 
-    float applyPitch (float base) const { return base * std::pow (2.0f, pitchCents / 100.0f); }
+    // Transposition, clamped to the range the oscillator can actually render:
+    // ±4 octaves from the top of the keyboard would otherwise pass Nyquist.
+    float applyPitch (float base) const
+    {
+        return juce::jlimit (8.0f, 0.45f * static_cast<float> (sampleRate),
+                             base * std::pow (2.0f, pitchCents / 100.0f));
+    }
 
     // Block-rate constants (recomputed in prepareBlock).
     float attackInc = 0.0f;

@@ -45,6 +45,7 @@ void QuantumEngine::setParams (float attack, float decay, float sustain, float r
 {
     chordMode = juce::jlimit (0, 2, chordModeSel);
     chordType = juce::jlimit (0, 7, chordTypeSel);
+    pitchCents = juce::jlimit (-4800.0f, 4800.0f, pitchCents);
     limiterOn = limiter;
     entangleOn = entangle;
     jumpRateAmt = jumpRate;
@@ -370,7 +371,10 @@ void QuantumEngine::process (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&
     }
 
     if (running)
+    {
+        fx.setReferenceHz (tonicHz());
         fx.process (buffer);
+    }
 
     if (running && limiterOn)
         applyLimiter (buffer);
@@ -415,4 +419,13 @@ float QuantumEngine::getUiNoteFreqHz() const
     const int note = uiNote.load (std::memory_order_relaxed);
     if (note < 0) return -1.0f;
     return 440.0f * std::pow (2.0f, (note - 69) / 12.0f);
+}
+
+float QuantumEngine::tonicHz() const
+{
+    const int note = uiNote.load (std::memory_order_relaxed);
+    if (note < 0)
+        return 0.0f;
+    // Chord degrees are just ratios of the key note, so the key note is the tonic.
+    return 440.0f * std::pow (2.0f, (note - 69) / 12.0f + pitchCents / 1200.0f);
 }

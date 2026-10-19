@@ -60,6 +60,10 @@ private:
     std::atomic<int> uiNote { -1 };
     int chordMode = 0;   // 0 off, 1 chord, 2 superposed chord
     int chordType = 0;
+    float pitchCents = 0.0f;   // master transposition, for the FX tonic
+
+    /** Root of the sounding note (transposed), or 0 when nothing is held. */
+    float tonicHz() const;
 
     // Stereo-linked peak limiter on the master bus: gain chases the sample
     // peak above the threshold with a ~1 ms attack and ~80 ms release, then a

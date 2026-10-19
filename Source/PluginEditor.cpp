@@ -40,7 +40,7 @@ namespace
     Fn gainText  = [] (double v) { return juce::String (v, 2); };
     Fn bitsText  = [] (double v) { return juce::String (juce::roundToInt (v)) + " bit"; };
     Fn rateText  = [] (double v) { return juce::String (v, 2) + " Hz"; };
-    Fn centsText = [] (double v) { return (v >= 0.0 ? "+" : "") + juce::String (juce::roundToInt (v)) + " ct"; };
+    Fn semitoneText = [] (double v) { return (v >= 0.0 ? "+" : "") + juce::String (v / 100.0, 1) + " st"; };
     Fn plainPct  = [] (double v) { return juce::String (v, 2); };
 
     struct KnobSpec
@@ -164,7 +164,7 @@ PluginEditor::PluginEditor (PluginProcessor& p)
             { "fxBits",     "BITS",   "Bitcrush quantisation depth.", bitsText },
             { "fxEntropy",  "CHAOS",  "Fractal entropy of the chaos effect.", percent } } },
         { Group::Harmony, {
-            { "pitchShift", "PITCH",  "Global transposition in cents (100 = one semitone), applied as 2^(cents/1200).", centsText },
+            { "pitchShift", "PITCH",  "Global transposition in semitones (-48 to +48 st), applied as 2^(st/12).", semitoneText },
             { "walkRate",   "RATE",   "Quantum-walk measurement ticks per second.", rateText } } },
     };
 
