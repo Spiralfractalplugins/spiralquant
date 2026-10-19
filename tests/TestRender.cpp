@@ -473,10 +473,14 @@ int main (int argc = 1, char** argv = nullptr)
     }
 
     // Fractal FX must be a tail, not a booster: with the wet path wide open it
-    // stays finite, audible and no louder than the dry signal it sits on.
+    // stays finite, audible and no louder than the dry signal it sits on. DEPTH
+    // decides how far the comb may wander, so it has to change the waveform.
     {
-        auto fractalPeak = [] (int fxType)
+        struct FractalRender { double peak = 0.0, level = 0.0; std::vector<float> data; };
+
+        auto fractalRender = [] (int fxType, float depth)
         {
+            FractalRender r;
             PluginProcessor proc;
             proc.prepareToPlay (48000.0, 512);
             proc.apvts.getParameter ("samplesPerTimestep")->setValueNotifyingHost (0.2f);
@@ -485,34 +489,41 @@ int main (int argc = 1, char** argv = nullptr)
             proc.apvts.getParameter ("fxMix")->setValueNotifyingHost (1.0f);
             proc.apvts.getParameter ("fxFeedback")->setValueNotifyingHost (1.0f);
             proc.apvts.getParameter ("fxEntropy")->setValueNotifyingHost (1.0f);
-            proc.apvts.getParameter ("fxDepth")->setValueNotifyingHost (1.0f);
+            proc.apvts.getParameter ("fxDepth")->setValueNotifyingHost (depth);
             proc.apvts.getParameter ("fxRate")->setValueNotifyingHost (0.5f);
 
             juce::MidiBuffer midi, empty;
             midi.addEvent (juce::MidiMessage::noteOn (1, 57, (juce::uint8) 110), 0);
             juce::AudioBuffer<float> buffer (2, 512);
-            float peak = 0.0f;
-            double energy = 0.0;
             for (int b = 0; b < 64; ++b)
             {
                 proc.processBlock (buffer, b == 0 ? midi : empty);
                 const float* d = buffer.getReadPointer (0);
                 for (int i = 0; i < 512; ++i)
                 {
-                    if (! std::isfinite (d[i])) return -1.0f;
-                    peak = std::max (peak, std::abs (d[i]));
-                    energy += (double) d[i] * d[i];
+                    if (! std::isfinite (d[i])) { r.peak = -1.0; return r; }
+                    r.peak = std::max (r.peak, (double) std::abs (d[i]));
+                    r.level += std::abs (d[i]);
+                    r.data.push_back (d[i]);
                 }
             }
-            return energy > 0.0 ? peak : 0.0f;
+            if (r.level <= 0.0) r.peak = 0.0;
+            return r;
         };
 
-        const float dry = fractalPeak (0);
-        const float wet = fractalPeak (4);
-        if (dry < 0.0f || wet < 0.0f) { std::cerr << "fractal FX NaN\n"; return 1; }
-        if (wet <= 0.0f) { std::cerr << "fractal FX silent\n"; return 1; }
-        if (wet > dry * 1.05f)
-        { std::cerr << "fractal FX louder than dry: " << wet << " vs " << dry << "\n"; return 1; }
+        const auto dry = fractalRender (0, 1.0f);
+        const auto wet = fractalRender (4, 1.0f);
+        const auto shallow = fractalRender (4, 0.0f);
+        if (dry.peak < 0.0 || wet.peak < 0.0 || shallow.peak < 0.0) { std::cerr << "fractal FX NaN\n"; return 1; }
+        if (wet.peak <= 0.0) { std::cerr << "fractal FX silent\n"; return 1; }
+        if (wet.peak > dry.peak * 1.05)
+        { std::cerr << "fractal FX louder than dry: " << wet.peak << " vs " << dry.peak << "\n"; return 1; }
+
+        double diff = 0.0;
+        for (size_t i = 0; i < wet.data.size(); ++i)
+            diff += std::abs (wet.data[i] - shallow.data[i]);
+        if (diff < wet.level * 0.02)
+        { std::cerr << "fractal DEPTH does nothing\n"; return 1; }
     }
 
     // Factory presets: every file must carry a params object whose keys are real

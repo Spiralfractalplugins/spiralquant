@@ -157,7 +157,7 @@ PluginEditor::PluginEditor (PluginProcessor& p)
             { "satMix",     "SAT",    "Dry/wet balance of the saturation.", percent },
             { "gain",       "GAIN",   "Per-voice output gain, applied after saturation.", gainText } } },
         { Group::Fx, {
-            { "fxDepth",    "DEPTH",  "Effect depth (delay time / phase spread).", percent },
+            { "fxDepth",    "DEPTH",  "Effect depth (delay time / phase spread). On Fractal: how many tonic periods the tail may span.", percent },
             { "fxRate",     "RATE",   "Effect modulation rate.", rateText },
             { "fxFeedback", "FDBK",   "Effect feedback.", percent },
             { "fxMix",      "MIX",    "Dry/wet balance of the master effect.", percent },

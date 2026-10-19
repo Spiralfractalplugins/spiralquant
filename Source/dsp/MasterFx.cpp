@@ -11,7 +11,7 @@ void MasterFx::prepare (double sampleRateHz)
     chorus.prepare (spec);
     phaser.prepare (spec);
 
-    fractalMax = juce::jmax (1024, (int) (sampleRate * 0.25));
+    fractalMax = juce::jmax (1024, (int) (sampleRate * 0.5));
     fractalLine.setSize (2, fractalMax);
     fractalLine.clear();
 
@@ -174,11 +174,20 @@ void MasterFx::processFractal (juce::AudioBuffer<float>& buffer)
     if (lfoPhase > juce::MathConstants<float>::twoPi)
         lfoPhase -= juce::MathConstants<float>::twoPi;
 
-    chaosState = 1.0f - 2.0f * std::fabs (2.0f * chaosState - 1.0f);
-    if (! std::isfinite (chaosState)) chaosState = 0.37f;
+    // Tent map on [0,1]: x -> 1 - |2x - 1|. It must stay inside the unit
+    // interval, otherwise the tap index below pins to one period forever.
+    chaosState = 1.0f - std::fabs (2.0f * chaosState - 1.0f);
+    chaosState = juce::jlimit (0.0f, 1.0f, chaosState);
 
-    const int tapPeriods = 1 + (int) (chaosState * 2.999f);          // 1..3 tonic periods
     const float tonicPeriod = (float) sampleRate / refHz;
+    // DEPTH opens the tap range: the tent map may reach 2 tonic periods at the
+    // bottom and 8 at the top. Never past a delay line that still holds whole
+    // periods, or the tail stops reinforcing the tonic.
+    const int periodCap = juce::jmax (1, (int) ((float) (fractalMax - 1) / tonicPeriod));
+    const int maxPeriods = juce::jmin (2 + juce::roundToInt (juce::jlimit (0.0f, 1.0f, depth) * 6.0f),
+                                       periodCap);
+    const int tapPeriods = juce::jlimit (1, maxPeriods,
+                                         1 + (int) (chaosState * (float) maxPeriods));
     const int delay = juce::jlimit (1, fractalMax - 1,
                                     (int) std::lround (tonicPeriod * (float) tapPeriods));
 
