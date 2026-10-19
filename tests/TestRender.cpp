@@ -472,6 +472,108 @@ int main (int argc = 1, char** argv = nullptr)
         if (on >= off) { std::cerr << "limiter did not reduce the peak\n"; return 1; }
     }
 
+    // Fractal FX must be a tail, not a booster: with the wet path wide open it
+    // stays finite, audible and no louder than the dry signal it sits on.
+    {
+        auto fractalPeak = [] (int fxType)
+        {
+            PluginProcessor proc;
+            proc.prepareToPlay (48000.0, 512);
+            proc.apvts.getParameter ("samplesPerTimestep")->setValueNotifyingHost (0.2f);
+            proc.apvts.getParameter ("limiter")->setValueNotifyingHost (0.0f);
+            proc.apvts.getParameter ("fxType")->setValueNotifyingHost ((float) fxType / 4.0f);
+            proc.apvts.getParameter ("fxMix")->setValueNotifyingHost (1.0f);
+            proc.apvts.getParameter ("fxFeedback")->setValueNotifyingHost (1.0f);
+            proc.apvts.getParameter ("fxEntropy")->setValueNotifyingHost (1.0f);
+            proc.apvts.getParameter ("fxDepth")->setValueNotifyingHost (1.0f);
+            proc.apvts.getParameter ("fxRate")->setValueNotifyingHost (0.5f);
+
+            juce::MidiBuffer midi, empty;
+            midi.addEvent (juce::MidiMessage::noteOn (1, 57, (juce::uint8) 110), 0);
+            juce::AudioBuffer<float> buffer (2, 512);
+            float peak = 0.0f;
+            double energy = 0.0;
+            for (int b = 0; b < 64; ++b)
+            {
+                proc.processBlock (buffer, b == 0 ? midi : empty);
+                const float* d = buffer.getReadPointer (0);
+                for (int i = 0; i < 512; ++i)
+                {
+                    if (! std::isfinite (d[i])) return -1.0f;
+                    peak = std::max (peak, std::abs (d[i]));
+                    energy += (double) d[i] * d[i];
+                }
+            }
+            return energy > 0.0 ? peak : 0.0f;
+        };
+
+        const float dry = fractalPeak (0);
+        const float wet = fractalPeak (4);
+        if (dry < 0.0f || wet < 0.0f) { std::cerr << "fractal FX NaN\n"; return 1; }
+        if (wet <= 0.0f) { std::cerr << "fractal FX silent\n"; return 1; }
+        if (wet > dry * 1.05f)
+        { std::cerr << "fractal FX louder than dry: " << wet << " vs " << dry << "\n"; return 1; }
+    }
+
+    // Factory presets: every file must carry a params object whose keys are real
+    // parameter IDs inside their ranges, and applying it must render cleanly.
+    {
+        int checked = 0;
+        for (int i = 0; i < BinaryData::namedResourceListSize; ++i)
+        {
+            const juce::String resName { juce::CharPointer_UTF8 { BinaryData::namedResourceList[i] } };
+            const juce::String orig { juce::CharPointer_UTF8 { BinaryData::getNamedResourceOriginalFilename (resName.toRawUTF8()) } };
+            if (! orig.endsWith (".sp303preset"))
+                continue;
+
+            int size = 0;
+            const char* data = BinaryData::getNamedResource (resName.toRawUTF8(), size);
+            if (data == nullptr) { std::cerr << "preset resource unreadable: " << orig << "\n"; return 1; }
+            const auto parsed = juce::JSON::parse (juce::String::fromUTF8 (data, size));
+            if (! parsed.isObject()) { std::cerr << "preset is not a JSON object: " << orig << "\n"; return 1; }
+            auto* root = parsed.getDynamicObject();
+            auto* params = root->getProperty ("params").getDynamicObject();
+            if (params == nullptr) { std::cerr << "preset has no params object: " << orig << "\n"; return 1; }
+
+            PluginProcessor proc;
+            proc.prepareToPlay (48000.0, 512);
+            for (const auto& property : params->getProperties())
+            {
+                const juce::String key = property.name.toString();
+                if (! property.value.isDouble() && ! property.value.isInt())
+                { std::cerr << "preset value not numeric: " << orig.toRawUTF8() << " / " << key.toRawUTF8() << "\n"; return 1; }
+                auto* p = proc.apvts.getParameter (key);
+                if (p == nullptr)
+                { std::cerr << "unknown parameter " << key.toRawUTF8() << " in " << orig.toRawUTF8() << "\n"; return 1; }
+                const float raw = static_cast<float> (static_cast<double> (property.value));
+                const auto& nr = p->getNormalisableRange();
+                const float norm = nr.convertTo0to1 (raw);
+                if (norm < -0.001f || norm > 1.001f)
+                { std::cerr << "value " << raw << " out of range for " << key.toRawUTF8() << " in " << orig.toRawUTF8() << "\n"; return 1; }
+                p->setValueNotifyingHost (norm);
+            }
+
+            juce::MidiBuffer midi, empty;
+            midi.addEvent (juce::MidiMessage::noteOn (1, 60, (juce::uint8) 100), 0);
+            juce::AudioBuffer<float> buffer (2, 512);
+            double energy = 0.0;
+            for (int b = 0; b < 16; ++b)
+            {
+                proc.processBlock (buffer, b == 0 ? midi : empty);
+                const float* d = buffer.getReadPointer (0);
+                for (int i = 0; i < 512; ++i)
+                {
+                    if (! std::isfinite (d[i])) { std::cerr << "preset NaN: " << orig << "\n"; return 1; }
+                    energy += (double) d[i] * d[i];
+                }
+            }
+            if (energy <= 0.0) { std::cerr << "preset silent: " << orig << "\n"; return 1; }
+            ++checked;
+        }
+        if (checked < 18)
+        { std::cerr << "expected at least 18 factory presets, found " << checked << "\n"; return 1; }
+    }
+
     if (argc > 1 && juce::String (argv[1]) == "--bench")
     {
         // Deterministic CPU benchmark: 8 voices, evolution on, no FX.
