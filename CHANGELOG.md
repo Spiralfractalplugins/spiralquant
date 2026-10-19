@@ -5,6 +5,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- Cross-build tooling: `tools/windows-cross-build/cross-build.sh` compiles the
+  Windows VST3 + Standalone with MSVC under Wine and a native Linux build in one
+  amd64 Docker/OrbStack container (no matching machine needed), then runs the
+  render test suite on the produced PE binary as a smoke test; `docs/BUILDING.md`
+  covers the container, native Windows/Linux instructions and the JUCE
+  VST3-helper patching it relies on. `scripts/make_dist.sh` now takes the
+  cross-build output directory (`build/windows`, `build/linux`) and names the
+  package accordingly.
+
 ## [0.1.1] - 2026-10-19
 
 ### Added

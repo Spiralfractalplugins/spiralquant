@@ -248,6 +248,20 @@ cmake --build build --config Release --parallel
 On macOS the project builds a universal binary (`arm64;x86_64`) by default and
 copies built plug-ins next to the artefacts (`JUCE_COPY_PLUGIN_AFTER_BUILD`).
 
+Windows and Linux builds need no matching machine —
+`tools/windows-cross-build/cross-build.sh` compiles the Windows VST3 with MSVC
+under Wine and the Linux one natively, both in an amd64 Docker/OrbStack
+container, and finishes by running the render test suite on the produced PE
+binary:
+
+```sh
+./tools/windows-cross-build/cross-build.sh          # both platforms
+./tools/windows-cross-build/cross-build.sh windows  # Windows only
+```
+
+See [Building](docs/BUILDING.md) for requirements, native per-platform
+instructions and what the container scripts work around.
+
 ## Tests
 
 A console test target is built from `tests/TestRender.cpp`:
@@ -297,6 +311,10 @@ It must print `ALL TESTS PASSED`.
 - `build/SpiralQuant_artefacts/Release/AU/SpiralQuant.component`
 - `build/SpiralQuant_artefacts/Release/Standalone/SpiralQuant.app`
 
+The container cross-build copies its results to `build/windows/`
+(`SpiralQuant.vst3`, `SpiralQuant.exe`, `SpiralQuantTests.exe`) and
+`build/linux/`.
+
 See [How it works](docs/HOW_IT_WORKS.md) for the signal path and sound generation details.
 
 ## Presets
@@ -336,7 +354,8 @@ Source/
   gui/                   palette/skins, scope canvas, ADSR editor, look-and-feel
 tests/TestRender.cpp
 vendor/JUCE/            vendored JUCE (do not edit)
-docs/                   manuals (EN/RU), announcements, HOW_IT_WORKS, screenshots
+docs/                   manuals (EN/RU), announcements, HOW_IT_WORKS, BUILDING, screenshots
+tools/windows-cross-build/  Docker/OrbStack cross-build for Windows (MSVC+Wine) and Linux
 scripts/make_dist.sh    bundles VST3/AU/Standalone + docs into dist/ + zip
 dist/                   generated release distributions (gitignored except README)
 ```

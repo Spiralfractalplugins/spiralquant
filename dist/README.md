@@ -17,3 +17,12 @@ Debug plug-in.
 Produces `dist/SpiralQuant-v<version>-<os>-<arch>/` with VST3, AU (macOS) and
 Standalone bundles plus `INSTALL.txt`, `README.md` and the `docs/` manuals, and
 a matching `.zip` next to it.
+
+Windows and Linux builds come from the container cross-build
+(`./tools/windows-cross-build/cross-build.sh windows`, see `docs/BUILDING.md`).
+The platform is taken from the directory name, so no extra argument is needed:
+
+```sh
+scripts/make_dist.sh build/windows
+scripts/make_dist.sh build/linux
+```
