@@ -12,7 +12,8 @@ MIDI note
       -> drive / saturation
       -> voice gain
   -> QuantumEngine (sum up to 8 voices)
-  -> MasterFx (optional Flanger / Phaser / Bitcrush / Fractal Entropy)
+  -> MasterFx (optional Flanger / Phaser / Bitcrush / Fractal comb)
+  -> limiter (чип LIMIT)
   -> stereo output
   -> scope: |psi(x)| + |psi~(k)| spectrum from first active voice
 ```
@@ -148,7 +149,11 @@ sin(phi), note-off — измерение, которое выбирает по�
 - Flanger (`juce::dsp::Chorus`)
 - Phaser (`juce::dsp::Phaser`)
 - Bitcrush (снижение разрядности и sample-rate)
-- Fractal Entropy (хаотическая модуляция + entropy noise)
+- Fractal — тонический гребенчатый фильтр, а не генератор шума: tent-map выбирает
+  длину задержки, кратную целому числу периодов тоники (`QuantumEngine::tonicHz()` —
+  взятая нота с учётом `pitchShift`), а `fxEntropy` правит яркость хвоста. Ветка wet
+  нормирована на (1 − feedback) и ограничена по уровню, поэтому эффект может быть
+  только тише сухой смеси; injected noise и усиление хаосом убраны.
 
 `fxMix`, `fxDepth`, `fxRate`, `fxFeedback`, `fxBits`, `fxEntropy` управляют
 эффектами. Solo режимы: Full / Dry / Wet.
