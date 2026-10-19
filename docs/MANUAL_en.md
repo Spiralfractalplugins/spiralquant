@@ -129,7 +129,7 @@ Fractal. When Off, the whole section dims and is bypassed.
 | Knob | Meaning |
 |---|---|
 | DEPTH | Delay time / phase spread (Fractal: how many tonic periods the tail may span) |
-| RATE | Modulation rate (Hz) |
+| RATE | Modulation rate (Hz) (Fractal: how often the comb re-tunes) |
 | FDBK | Feedback |
 | MIX | Dry/wet |
 | BITS | Bitcrush resolution (2–16 bit) |
@@ -138,8 +138,9 @@ Fractal. When Off, the whole section dims and is bypassed.
 **Fractal** is a tonal tail, not a noise generator: the chaos map picks a feedback
 comb whose length is a whole number of periods of the note you are playing, so the
 wet signal reinforces the tonic and its harmonics. DEPTH opens that span from two
-periods up to eight, CHAOS sets how bright the tail rings. Its level is normalised
-by feedback, so the effect never gets louder than the dry mix.
+periods up to eight, RATE sets how often the comb jumps to a new one (slow = one
+relationship held for bars), CHAOS sets how bright the tail rings. Its level is
+normalised by feedback, so the effect never gets louder than the dry mix.
 
 **Solo** selects Full / Dry-only / Wet-only output.
 

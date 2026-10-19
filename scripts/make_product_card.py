@@ -129,7 +129,7 @@ def main():
     d.text((rx, y + 118), "Made with JUCE 8   ·   ~0.65 ms per 512-sample block, 8 voices @ 48 kHz",
            font=f_reg(29), fill=GREY)
     d.text((rx, y + 186), "FREE & OPEN SOURCE", font=f_bold(46), fill=GREEN)
-    d.text((rx, y + 258), "v0.1.0   ·   macOS universal   ·   VST3 / AU / Standalone",
+    d.text((rx, y + 258), "v0.1.1   ·   macOS universal   ·   VST3 / AU / Standalone",
            font=f_reg(29), fill=GREY)
 
     out = "/Users/spiralfractal/Work/code/spiralquant_vst/docs/marketing/product-card.png"

@@ -5,6 +5,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-19
+
 ### Added
 - Phonon-collapse readout: `jumpRate` drives a Monte-Carlo quantum-trajectory
   collapse (â ψ = (x/σ)ψ + σ·∂ψ/∂x) applied per evolution step, seeded per voice
@@ -76,6 +78,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   bottom of the knob, eight at the top — instead of the tail being pinned to 1–3.
   The delay line grew to 0.5 s so whole-period taps still fit at the bottom of the
   keyboard; the corridor narrows to match when they would not.
+- Fractal `RATE` is the comb's re-tune clock: the map steps once every 1/rate
+  seconds rather than every block, so a slow rate holds one tonic relationship for
+  bars and a fast one makes the tail hop between harmonics.
 - Preset recall applies every parameter in the file and the browser dropdown
   recalls on selection (`LOAD` re-applies). Factory bank grew to 18 presets, each
   carrying the full parameter set.
