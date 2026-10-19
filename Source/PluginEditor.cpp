@@ -158,7 +158,7 @@ PluginEditor::PluginEditor (PluginProcessor& p)
             { "gain",       "GAIN",   "Per-voice output gain, applied after saturation.", gainText } } },
         { Group::Fx, {
             { "fxDepth",    "DEPTH",  "Effect depth (delay time / phase spread). On Fractal: how many tonic periods the tail may span.", percent },
-            { "fxRate",     "RATE",   "Effect modulation rate.", rateText },
+            { "fxRate",     "RATE",   "Effect modulation rate. On Fractal: how often the comb re-tunes to a new tonic period.", rateText },
             { "fxFeedback", "FDBK",   "Effect feedback.", percent },
             { "fxMix",      "MIX",    "Dry/wet balance of the master effect.", percent },
             { "fxBits",     "BITS",   "Bitcrush quantisation depth.", bitsText },

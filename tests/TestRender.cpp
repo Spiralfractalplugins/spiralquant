@@ -474,11 +474,12 @@ int main (int argc = 1, char** argv = nullptr)
 
     // Fractal FX must be a tail, not a booster: with the wet path wide open it
     // stays finite, audible and no louder than the dry signal it sits on. DEPTH
-    // decides how far the comb may wander, so it has to change the waveform.
+    // decides how far the comb may wander and RATE how often it re-tunes, so both
+    // have to move the waveform, not just the loudness.
     {
         struct FractalRender { double peak = 0.0, level = 0.0; std::vector<float> data; };
 
-        auto fractalRender = [] (int fxType, float depth)
+        auto fractalRender = [] (int fxType, float depth, float rateNorm = 0.5f)
         {
             FractalRender r;
             PluginProcessor proc;
@@ -490,7 +491,7 @@ int main (int argc = 1, char** argv = nullptr)
             proc.apvts.getParameter ("fxFeedback")->setValueNotifyingHost (1.0f);
             proc.apvts.getParameter ("fxEntropy")->setValueNotifyingHost (1.0f);
             proc.apvts.getParameter ("fxDepth")->setValueNotifyingHost (depth);
-            proc.apvts.getParameter ("fxRate")->setValueNotifyingHost (0.5f);
+            proc.apvts.getParameter ("fxRate")->setValueNotifyingHost (rateNorm);
 
             juce::MidiBuffer midi, empty;
             midi.addEvent (juce::MidiMessage::noteOn (1, 57, (juce::uint8) 110), 0);
@@ -511,19 +512,28 @@ int main (int argc = 1, char** argv = nullptr)
             return r;
         };
 
+        auto relativeDiff = [] (const FractalRender& a, const FractalRender& b)
+        {
+            double diff = 0.0;
+            for (size_t i = 0; i < a.data.size(); ++i)
+                diff += std::abs (a.data[i] - b.data[i]);
+            return diff / a.level;
+        };
+
         const auto dry = fractalRender (0, 1.0f);
         const auto wet = fractalRender (4, 1.0f);
         const auto shallow = fractalRender (4, 0.0f);
-        if (dry.peak < 0.0 || wet.peak < 0.0 || shallow.peak < 0.0) { std::cerr << "fractal FX NaN\n"; return 1; }
+        const auto still = fractalRender (4, 1.0f, 0.0f);
+        const auto hopping = fractalRender (4, 1.0f, 1.0f);
+        if (dry.peak < 0.0 || wet.peak < 0.0 || shallow.peak < 0.0
+            || still.peak < 0.0 || hopping.peak < 0.0) { std::cerr << "fractal FX NaN\n"; return 1; }
         if (wet.peak <= 0.0) { std::cerr << "fractal FX silent\n"; return 1; }
         if (wet.peak > dry.peak * 1.05)
         { std::cerr << "fractal FX louder than dry: " << wet.peak << " vs " << dry.peak << "\n"; return 1; }
-
-        double diff = 0.0;
-        for (size_t i = 0; i < wet.data.size(); ++i)
-            diff += std::abs (wet.data[i] - shallow.data[i]);
-        if (diff < wet.level * 0.02)
+        if (relativeDiff (wet, shallow) < 0.02)
         { std::cerr << "fractal DEPTH does nothing\n"; return 1; }
+        if (relativeDiff (still, hopping) < 0.02)
+        { std::cerr << "fractal RATE does nothing\n"; return 1; }
     }
 
     // Factory presets: every file must carry a params object whose keys are real

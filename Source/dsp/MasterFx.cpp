@@ -22,12 +22,12 @@ void MasterFx::reset()
 {
     chorus.reset();
     phaser.reset();
-    lfoPhase = 0.0f;
     holdCounter = 0.0f;
     heldL = 0.0f;
     heldR = 0.0f;
     holdPeriod = 1;
     chaosState = 0.37f;
+    fractalClock = 0.0;
     fractalWrite = 0;
     fractalLp [0] = 0.0f;
     fractalLp [1] = 0.0f;
@@ -170,14 +170,22 @@ void MasterFx::processFractal (juce::AudioBuffer<float>& buffer)
     // comb length that is a whole number of tonic periods and steers the tail's
     // brightness. Wet gain is normalised by (1 - feedback) and trimmed, so this
     // path can only ever be quieter than the dry signal.
-    lfoPhase += (juce::MathConstants<float>::twoPi * rate * (float) numSamples) / (float) sampleRate;
-    if (lfoPhase > juce::MathConstants<float>::twoPi)
-        lfoPhase -= juce::MathConstants<float>::twoPi;
 
-    // Tent map on [0,1]: x -> 1 - |2x - 1|. It must stay inside the unit
-    // interval, otherwise the tap index below pins to one period forever.
-    chaosState = 1.0f - std::fabs (2.0f * chaosState - 1.0f);
-    chaosState = juce::jlimit (0.0f, 1.0f, chaosState);
+    // RATE is how often the comb re-tunes. Slower than one step per block means
+    // the map holds still, so a single tonic relationship rings for whole bars;
+    // faster makes the tail hop between harmonics.
+    const double retunePeriod = juce::jmax (1.0, (double) sampleRate / juce::jmax (0.01f, rate));
+    fractalClock += (double) numSamples;
+    const int steps = (int) (fractalClock / retunePeriod);
+    fractalClock -= (double) steps * retunePeriod;
+
+    for (int s = 0; s < steps; ++s)
+    {
+        // Tent map on [0,1]: x -> 1 - |2x - 1|. It must stay inside the unit
+        // interval, otherwise the tap index below pins to one period forever.
+        chaosState = 1.0f - std::fabs (2.0f * chaosState - 1.0f);
+        chaosState = juce::jlimit (0.0f, 1.0f, chaosState);
+    }
 
     const float tonicPeriod = (float) sampleRate / refHz;
     // DEPTH opens the tap range: the tent map may reach 2 tonic periods at the

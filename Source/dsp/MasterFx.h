@@ -27,7 +27,6 @@ private:
     juce::dsp::Chorus<float> chorus;
     juce::dsp::Phaser<float> phaser;
 
-    float lfoPhase = 0.0f;
     float holdCounter = 0.0f;
     float heldL = 0.0f, heldR = 0.0f;
     int holdPeriod = 1;
@@ -41,6 +40,7 @@ private:
     juce::AudioBuffer<float> fractalLine;
     int fractalMax = 0;
     int fractalWrite = 0;
+    double fractalClock = 0.0;   // samples since the last re-tune
     float fractalLp [2] { 0.0f, 0.0f };
 
     void processBitcrush (juce::AudioBuffer<float>& buffer);
