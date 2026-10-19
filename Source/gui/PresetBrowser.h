@@ -23,6 +23,9 @@ public:
         loadBtn.onClick = [this] { applySelected(); };
         saveBtn.onClick = [this] { saveCurrent(); };
         deleteBtn.onClick = [this] { deleteSelected(); };
+        // Picking a preset from the list recalls it straight away; LOAD is only
+        // a re-apply of the current selection.
+        combo.onChange = [this] { applySelected(); };
         refresh();
     }
 
@@ -119,13 +122,26 @@ private:
         const auto parsed = juce::JSON::parse (json);
         if (! parsed.isObject())
             return;
-        const auto params = parsed.getDynamicObject ();
-        if (params == nullptr)
+
+        auto* root = parsed.getDynamicObject();
+        if (root == nullptr)
             return;
-        for (const auto& key : params->getProperties())
+
+        // Parameter values live under "params"; a flat file keeps them at the
+        // top level.
+        juce::DynamicObject* source = root;
+        if (auto* nested = root->getProperty ("params").getDynamicObject())
+            source = nested;
+
+        for (const auto& property : source->getProperties())
         {
-            if (auto* p = state.getParameter (key.name.toString()))
-                p->setValueNotifyingHost (p->getNormalisableRange().convertTo0to1 ((float) (double) key.value));
+            if (! property.value.isDouble() && ! property.value.isInt())
+                continue;
+            auto* param = state.getParameter (property.name.toString());
+            if (param == nullptr)
+                continue;
+            const float raw = static_cast<float> (static_cast<double> (property.value));
+            param->setValueNotifyingHost (param->getNormalisableRange().convertTo0to1 (raw));
         }
     }
 
@@ -157,9 +173,14 @@ private:
         obj->setProperty ("credit", "User");
         auto* params = new juce::DynamicObject();
         obj->setProperty ("params", juce::var (params));
-        for (int i = 0; i < state.state.getNumProperties(); ++i)
-            if (auto* p = state.getParameter (state.state.getPropertyName (i).toString()))
-                params->setProperty (p->paramID, (double) p->getNormalisableRange().convertFrom0to1 (p->getValue()));
+        // APVTS keeps one PARAM child per parameter; the ValueTree's own
+        // properties are not the parameter values.
+        for (int i = 0; i < state.state.getNumChildren(); ++i)
+        {
+            const auto child = state.state.getChild (i);
+            if (auto* p = state.getParameter (child.getProperty ("id").toString()))
+                params->setProperty (p->paramID, static_cast<double> (p->getNormalisableRange().convertFrom0to1 (p->getValue())));
+        }
         file.replaceWithText (juce::JSON::toString (root));
         refresh();
         for (int i = 0; i < entries.size(); ++i)
