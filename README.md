@@ -1,22 +1,77 @@
+<div align="center">
+
+<img src="docs/marketing/product-card.png" alt="SpiralQuant — quantum wavetable synthesizer" width="900"/>
+
 # SpiralQuant
 
-**SpiralQuant** is a polyphonic software synthesizer plug-in built with [JUCE](https://juce.com/).
-Instead of a classic wavetable, each voice's oscillator is a complex-valued
-solution of the 1D time-dependent Schrödinger equation, evolved in real time with
-a split-step Fourier method on a 128-point grid.
+**A polyphonic synthesizer whose oscillator is not a wavetable — it is a live solution of the Schrödinger equation.**
 
-**Docs**: [User manual (EN)](docs/MANUAL_en.md) · [Руководство (RU)](docs/MANUAL_ru.md)
-· [Announcement text](docs/ANNOUNCE_en.md) / [анонс](docs/ANNOUNCE_ru.md)
+[![Release](https://img.shields.io/github/v/release/Spiralfractalplugins/spiralquant?style=flat-square&label=release&color=00d9ff)](https://github.com/Spiralfractalplugins/spiralquant/releases/latest)
+[![Platforms](https://img.shields.io/badge/platforms-macOS%20·%20Windows%20·%20Linux-111111?style=flat-square)](#downloads)
+[![Formats](https://img.shields.io/badge/VST3%20·%20AU%20·%20Standalone-6a5acd?style=flat-square)](#formats)
+[![License](https://img.shields.io/badge/license-GPL--3.0-2ea44f?style=flat-square)](LICENSE)
+[![JUCE](https://img.shields.io/badge/built%20with-JUCE%208-orange?style=flat-square)](https://juce.com/)
 
-## UI
+[**Downloads**](#downloads) · [Manual (EN)](docs/MANUAL_en.md) · [Руководство (RU)](docs/MANUAL_ru.md) · [How it works](docs/HOW_IT_WORKS.md) · [Building](docs/BUILDING.md)
+
+</div>
+
+---
+
+Every voice of SpiralQuant holds a complex-valued 128-point wavefunction
+ψ(x), evolved in real time with the 1D time-dependent Schrödinger equation
+via a split-step Fourier method. The audio is whatever you *measure* out of
+it — Re ψ, Im ψ, |ψ|, instantaneous phase, or a quantised QND readout.
+The wave interferes with itself, diffracts around potential edges, tunnels
+through barriers, collapses under stochastic phonon jumps — and that is the
+timbre.
 
 ![SpiralQuant HUD interface](docs/screenshots/ui-hud.png)
 
+## Downloads
+
+Grab the prebuilt bundles from the
+[**latest release**](https://github.com/Spiralfractalplugins/spiralquant/releases/latest):
+
+| Package | Contents |
+| ------- | -------- |
+| `SpiralQuant-v0.1.1-macos-universal.zip` | VST3 + AU + Standalone (Apple Silicon & Intel) |
+| `SpiralQuant-v0.1.1-windows-x64.zip` | VST3 + Standalone |
+| `SpiralQuant-v0.1.1-linux-x86_64.zip` | VST3 + Standalone |
+
+Each archive carries its own `INSTALL.txt`; see [BUILDING](docs/BUILDING.md)
+to compile from source.
+
 ## Formats
 
-- VST3
-- AU (macOS)
-- Standalone application
+- **VST3** — macOS, Windows, Linux
+- **AU** — macOS
+- **Standalone** application — all three platforms
+
+## Highlights
+
+- **8-voice polyphony** with oldest-voice stealing; MIDI notes map to wave
+  readout rate, the evolving ψ shape is the timbre.
+- **Six initial wave shapes** (Gaussian, Sine, Cos, Parabola, Saw, Square) and
+  **six potentials** (Flat, Harmonic, Infinite Well, Barrier, Double Well, Linear).
+- **Split-step Fourier evolution** — unitary phase rotations, no energy invented.
+- **Quantum phenomena as sound controls**: tunneling (Gamow transparency),
+  phonon collapse with stochastic quantum jumps, Zeno freezing, squeezed states,
+  EPR-entangled voice partners, superposed chords that resolve on note-off,
+  a quantum-walk melody generator, cavity ringdown and resonator memory.
+- **Fourier readout**: rotate the measurement quadrature from ψ(x) to ψ̃(k)
+  (fractional-Fourier in between).
+- **Master FX**: Flanger / Phaser / Bitcrush / a tonic-locked Fractal feedback
+  comb, plus an output limiter.
+- **Chord mode** with just-intonation voicings, ±48 st pitch shift, ADSR,
+  resonant low-pass, drive/saturation.
+- **Three UI skins** (Dark / SciFi Neon / Console) and a live HUD scope showing
+  the actual `|ψ(x)|` and `|ψ̃(k)|` feeding the audio.
+- **18 factory presets** embedded at build time; user presets as JSON.
+
+<details>
+<summary><b>Full feature list</b></summary>
+
 ## Sound engine
 
 - **8-voice polyphony** with oldest-voice stealing.
@@ -42,6 +97,66 @@ a split-step Fourier method on a 128-point grid.
   potential barrier instead of hard-reflecting it (κ from `√(2m(V−E))`).
 - **Preset browser**: factory presets embedded at build time, user presets saved
   as `.sp303preset` JSON in the app-support folder.
+
+</details>
+
+## Quick start (from source)
+
+Requirements: CMake 3.24+, a C++17 compiler, and JUCE 8.0.14 (fetched into
+`vendor/JUCE/`, which is not committed):
+
+```sh
+git clone --depth 1 --branch 8.0.14 https://github.com/juce-framework/JUCE.git vendor/JUCE
+
+cmake -S . -B build
+cmake --build build --config Release --parallel
+```
+
+On macOS the project builds a universal binary (`arm64;x86_64`) by default and
+copies built plug-ins next to the artefacts (`JUCE_COPY_PLUGIN_AFTER_BUILD`).
+
+Windows and Linux builds need no matching machine —
+`tools/windows-cross-build/cross-build.sh` compiles the Windows VST3 with MSVC
+under Wine and the Linux one natively, both in an amd64 Docker/OrbStack
+container, and finishes by running the render test suite on the produced PE
+binary:
+
+```sh
+./tools/windows-cross-build/cross-build.sh          # both platforms
+./tools/windows-cross-build/cross-build.sh windows  # Windows only
+```
+
+See [Building](docs/BUILDING.md) for requirements, native per-platform
+instructions and what the container scripts work around.
+
+> SpiralQuant is GPLv3 — the same copyleft family as JUCE's open licence. If
+> you ship a closed-source product built on this code, review the JUCE
+> licensing terms for your use case.
+
+## Tests
+
+A console test target is built from `tests/TestRender.cpp`:
+
+```sh
+cmake --build build --target SpiralQuantTests --config Release
+./build/SpiralQuantTests_artefacts/Release/SpiralQuantTests
+```
+
+The suite:
+
+- renders every `waveType × potentialType × sampleMode` combination (6×6×5),
+  checking for NaN/inf and non-silent output;
+- renders the chord × pitch-shift × tunneling matrix;
+- renders the phonon features: collapse (deterministic across identical seeds),
+  quadrature rotation, PhononQND staircase, and superposed chords (verifying notes
+  go silent after release — no stuck voices);
+- exercises all master FX types and a state save/restore roundtrip;
+- `--bench` runs a deterministic 20 000-block, 8-voice CPU benchmark;
+- `--render-logo <dir>` regenerates `resources/logo.png` and the iconset PNGs
+  from the vector `LogoMark` (used to refresh `resources/icons/SpiralQuant.icns`
+  via `iconutil`).
+
+It must print `ALL TESTS PASSED`.
 
 ## Parameters
 
@@ -232,59 +347,6 @@ voice on top, and the momentum spectrum `|ψ̃(k)|` with a harmonic grid (bin n 
 n·f₀, labelled in Hz) below — the audio and the picture come from one snapshot of
 the engine, never from a look-alike animation.
 
-## Building
-
-Prerequisites:
-
-- CMake 3.24+
-- C++17 compiler
-- JUCE is vendored under `vendor/JUCE/` (no separate install needed).
-
-```sh
-cmake -S . -B build
-cmake --build build --config Release --parallel
-```
-
-On macOS the project builds a universal binary (`arm64;x86_64`) by default and
-copies built plug-ins next to the artefacts (`JUCE_COPY_PLUGIN_AFTER_BUILD`).
-
-Windows and Linux builds need no matching machine —
-`tools/windows-cross-build/cross-build.sh` compiles the Windows VST3 with MSVC
-under Wine and the Linux one natively, both in an amd64 Docker/OrbStack
-container, and finishes by running the render test suite on the produced PE
-binary:
-
-```sh
-./tools/windows-cross-build/cross-build.sh          # both platforms
-./tools/windows-cross-build/cross-build.sh windows  # Windows only
-```
-
-See [Building](docs/BUILDING.md) for requirements, native per-platform
-instructions and what the container scripts work around.
-
-## Tests
-
-A console test target is built from `tests/TestRender.cpp`:
-
-```sh
-cmake --build build --target SpiralQuantTests --config Release
-./build/SpiralQuantTests_artefacts/Release/SpiralQuantTests
-```
-
-The suite:
-
-- renders every `waveType × potentialType × sampleMode` combination (6×6×5),
-  checking for NaN/inf and non-silent output;
-- renders the chord × pitch-shift × tunneling matrix;
-- renders the phonon features: collapse (deterministic across identical seeds),
-  quadrature rotation, PhononQND staircase, and superposed chords (verifying notes
-  go silent after release — no stuck voices);
-- exercises all master FX types and a state save/restore roundtrip;
-- `--bench` runs a deterministic 20 000-block, 8-voice CPU benchmark;
-- `--render-logo <dir>` regenerates `resources/logo.png` and the iconset PNGs
-  from the vector `LogoMark` (used to refresh `resources/icons/SpiralQuant.icns`
-  via `iconutil`).
-
 ## Build options
 
 ```sh
@@ -302,8 +364,6 @@ cmake --build build-pgo --target SpiralQuantTests
 
 The default is `-O3 -fno-math-errno -ffp-contract=fast`; `-ffast-math`/-Ofast are
 opt-in because the DSP relies on `isfinite` guards for NaN rejection.
-
-It must print `ALL TESTS PASSED`.
 
 ## Build artefacts (macOS)
 
@@ -343,24 +403,40 @@ parameter to a user preset in app-support.
 
 ```
 CMakeLists.txt
+LICENSE                   GPL-3
 Source/
-  PluginProcessor.{h,cpp}   APVTS + process block
-  PluginEditor.{h,cpp}     editor + attachments
-  CreateEditor.cpp         JUCE plugin entry point
+  PluginProcessor.{h,cpp} APVTS + process block
+  PluginEditor.{h,cpp}    editor + attachments
+  CreateEditor.cpp        JUCE plugin entry point
   dsp/
-    QuantumEngine.{h,cpp}  voice pool (8 voices)
-    QuantumVoice.{h,cpp}   envelope, filter, saturation
-    QuantumOsc.{h,cpp}     Schrödinger wavetable
+    QuantumEngine.{h,cpp} voice pool (8 voices)
+    QuantumVoice.{h,cpp}  envelope, filter, saturation
+    QuantumOsc.{h,cpp}    Schrödinger wavetable
+    MasterFx.{h,cpp}      master effects
   gui/                   palette/skins, scope canvas, ADSR editor, look-and-feel
 tests/TestRender.cpp
-vendor/JUCE/            vendored JUCE (do not edit)
-docs/                   manuals (EN/RU), announcements, HOW_IT_WORKS, BUILDING, screenshots
+vendor/JUCE/            JUCE 8.0.14 (cloned in, not committed)
+docs/                   manuals (EN/RU), announcements, HOW_IT_WORKS, BUILDING, screenshots, marketing cards
 tools/windows-cross-build/  Docker/OrbStack cross-build for Windows (MSVC+Wine) and Linux
 scripts/make_dist.sh    bundles VST3/AU/Standalone + docs into dist/ + zip
 dist/                   generated release distributions (gitignored except README)
 ```
 
+## Documentation
+
+- [User manual (EN)](docs/MANUAL_en.md) · [Руководство (RU)](docs/MANUAL_ru.md)
+- [How the sound works](docs/HOW_IT_WORKS.md) — signal path and physics in detail
+- [Building guide](docs/BUILDING.md) — per-platform and cross-build instructions
+- [Changelog](CHANGELOG.md)
+- [Announcement texts](docs/ANNOUNCE_en.md) / [анонс](docs/ANNOUNCE_ru.md)
+
 ## Known limitations
 
 - When no note is held the scope shows the resting wavefunction of voice 0 rather
   than a dedicated idle animation.
+
+## License
+
+Released under the [GNU General Public License v3.0](LICENSE).
+The DSP, UI and presets are © the SpiralFractal Plugins authors; JUCE itself is
+covered by its own licence and is not part of this repository.

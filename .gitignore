@@ -34,6 +34,10 @@ Thumbs.db
 *.xcodeproj/
 *.xcworkspace/
 
+# Local agent state
+.qoder/
+__pycache__/
+
 # Logs
 *.log
 .agents/skills/
@@ -47,4 +51,3 @@ vendor/
 dist/*
 !dist/README.md
 .licenses/
-docs/marketing/product-card.png
