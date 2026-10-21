@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
 """Compose the SpiralQuant marketing product card from the live UI screenshot."""
 import math
+from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
+
+ROOT = Path(__file__).resolve().parent.parent
+SHOT = ROOT / "docs" / "screenshots" / "ui-hud.png"
+OUT = ROOT / "docs" / "marketing" / "product-card.png"
 
 W, H = 2560, 1440
 BG = (7, 13, 24)
@@ -86,7 +91,7 @@ def main():
     d.text((fx0 + 132, fy0 + 52), "SPIRALQUANT", font=f_bold(54), fill=WHITE)
     spaced(d, (fx0 + 134, fy0 + 126), "QUANTUM WAVETABLE SYNTH", f_cond(26), CYAN, 3)
 
-    shot = Image.open("/Users/spiralfractal/Work/code/spiralquant_vst/docs/screenshots/ui-hud.png").convert("RGB")
+    shot = Image.open(SHOT).convert("RGB")
     shot = shot.resize((shot_w, shot_h), Image.LANCZOS)
     img.paste(shot, (fx0 + 40, fy0 + 185))
     d.rectangle([fx0 + 39, fy0 + 184, fx0 + 41 + shot_w, fy0 + 187 + shot_h], outline=(70, 150, 185), width=2)
@@ -132,7 +137,7 @@ def main():
     d.text((rx, y + 258), "v0.1.1   ·   macOS universal   ·   VST3 / AU / Standalone",
            font=f_reg(29), fill=GREY)
 
-    out = "/Users/spiralfractal/Work/code/spiralquant_vst/docs/marketing/product-card.png"
+    out = str(OUT)
     img.save(out)
     print("wrote", out, img.size)
 
