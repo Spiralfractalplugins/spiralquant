@@ -45,22 +45,31 @@ public:
     juce::Font getComboBoxFont (juce::ComboBox&) override { return Skins::font (Skins::fontBody * uiScale); }
 
     /** V4 hard-codes a 3 px corner here, which reads as a different shape next to
-        every other rectangle in the window. */
+        every other rectangle in the window. Chips are pills; the chevron gets a
+        hover ring so the dropdown reads as interactive. */
     void drawComboBox (juce::Graphics& g, int width, int height, bool,
                        int, int, int, int, juce::ComboBox& box) override
     {
         using namespace juce;
         const Palette& pal = Skins::current();
         const Rectangle<int> r (0, 0, width, height);
+        const float rad = jmin ((float) height, (float) width) * 0.5f;
+        const bool over = box.isMouseOver();
 
-        g.setColour (box.findColour (ComboBox::backgroundColourId));
-        g.fillRoundedRectangle (r.toFloat(), pal.corner);
-        g.setColour (box.findColour (ComboBox::outlineColourId));
-        g.drawRoundedRectangle (r.toFloat().reduced (0.5f), pal.corner, 1.0f);
+        if (! box.isMouseButtonDown())
+        {
+            g.setColour (Colour (0x2e000000));
+            g.fillRoundedRectangle (r.toFloat().translated (0, 1), rad);
+        }
+        g.setColour (box.isMouseButtonDown() ? pal.panelDeep.darker (0.2f)
+                    : over ? pal.panel.brighter (0.10f) : pal.panelDeep);
+        g.fillRoundedRectangle (r.toFloat(), rad);
+        g.setColour (over ? pal.accent.withAlpha (0.55f) : box.findColour (ComboBox::outlineColourId));
+        g.drawRoundedRectangle (r.toFloat().reduced (0.5f), rad, 1.0f);
         if (box.hasKeyboardFocus (true))
         {
             g.setColour (pal.accent.withAlpha (0.85f));
-            g.drawRoundedRectangle (r.toFloat().reduced (0.5f).expanded (2.0f), pal.corner + 2.0f, 2.0f);
+            g.drawRoundedRectangle (r.toFloat().reduced (0.5f).expanded (2.0f), rad + 2.0f, 2.0f);
         }
 
         const Rectangle<int> arrow (width - 24, 0, 18, height);
@@ -72,6 +81,76 @@ public:
         g.strokePath (p, PathStrokeType (1.8f));
     }
 
+    /** Shared pill renderer: fully rounded chip, soft drop shadow, subtle
+        vertical gradient, LED dot on the left that lights with the accent
+        colour when the state is on, and a hover/press outline language. */
+    void drawPill (juce::Graphics& g, juce::Rectangle<float> r, const Palette& pal,
+                   bool on, bool over, bool down, juce::Colour tint, bool showLed,
+                   float fontHeight, const juce::String& text, bool bold)
+    {
+        using namespace juce;
+        const float hgt = r.getHeight();
+        // Guard against chips narrower than they are tall: the cap keeps the
+        // pill from turning into an egg on compact layouts.
+        const float rad = jmin (hgt, r.getWidth()) * 0.5f;
+
+        if (! down)
+        {
+            g.setColour (Colour (0x2e000000));
+            g.fillRoundedRectangle (r.translated (0.0f, 1.0f), rad);
+        }
+
+        // Body: vertical gradient — tinted when on, deep panel when off.
+        ColourGradient body (on ? tint.withAlpha (0.34f)
+                                    .overlaidWith (pal.panelDeep)
+                              : (down ? pal.panelDeep.darker (0.25f) : pal.panelDeep),
+                             r.getX(), r.getY(),
+                             down ? pal.panelDeep : pal.panel,
+                             r.getX(), r.getBottom(), false);
+        g.setGradientFill (body);
+        g.fillRoundedRectangle (r, rad);
+
+        // Outline: accent when on, brighter on hover, quiet otherwise.
+        g.setColour (on ? tint.withAlpha (over ? 1.0f : 0.8f)
+                        : over ? pal.accent.withAlpha (0.55f) : pal.panelOutline);
+        g.drawRoundedRectangle (r.reduced (0.5f), rad, 1.1f);
+        if (on && over)
+        {
+            g.setColour (tint.withAlpha (0.25f));
+            g.drawRoundedRectangle (r.expanded (1.5f).reduced (0.5f), rad + 1.5f, 1.5f);
+        }
+
+        auto textR = r;
+        if (showLed)
+        {
+            const float ledR = jlimit (2.2f, 3.4f, hgt * 0.13f);
+            const float ledX = r.getX() + hgt * 0.48f;
+            const float ledY = r.getCentreY();
+            if (on)
+            {
+                g.setColour (tint.withAlpha (0.30f));
+                g.fillEllipse (ledX - ledR * 2.4f, ledY - ledR * 2.4f, ledR * 4.8f, ledR * 4.8f);
+            }
+            g.setColour (on ? tint.brighter (0.35f) : pal.textDim.withAlpha (0.35f));
+            g.fillEllipse (ledX - ledR, ledY - ledR, ledR * 2.0f, ledR * 2.0f);
+            if (on)
+            {
+                g.setColour (Colours::white.withAlpha (0.75f));
+                g.fillEllipse (ledX - ledR * 0.4f, ledY - ledR * 0.4f, ledR * 0.8f, ledR * 0.8f);
+            }
+            textR = textR.withTrimmedLeft (hgt * 0.95f);
+        }
+
+        if (text.isNotEmpty())
+        {
+            textR = textR.withTrimmedRight (hgt * 0.28f);
+            g.setColour (on ? Colours::white.overlaidWith (pal.text.withAlpha (0.35f)).brighter (0.15f)
+                            : pal.textDim);
+            g.setFont (Skins::font (fontHeight, bold ? Font::bold : Font::plain));
+            g.drawFittedText (text, textR.toNearestInt(), Justification::centred, 1);
+        }
+    }
+
     void drawButtonBackground (juce::Graphics& g, juce::Button& button, const juce::Colour&,
                                bool isMouseOver, bool isButtonDown) override
     {
@@ -79,12 +158,9 @@ public:
         const auto r = button.getLocalBounds().toFloat().reduced (0.5f);
         const bool on = button.getToggleState();
         const juce::Colour tint = button.findColour (juce::TextButton::buttonOnColourId);
-        g.setColour (isButtonDown ? pal.panelDeep.darker (0.2f)
-                    : on ? tint
-                    : isMouseOver ? pal.panel.brighter (0.18f) : pal.panelDeep);
-        g.fillRoundedRectangle (r, pal.corner);
-        g.setColour (on || isMouseOver ? pal.accent.withAlpha (on ? 0.9f : 0.45f) : pal.panelOutline);
-        g.drawRoundedRectangle (r, pal.corner, 1.0f);
+        const bool showLed = on; // cycle chips and preset buttons light up while active
+        drawPill (g, r, pal, on, isMouseOver, isButtonDown, tint.withAlpha (1.0f), showLed,
+                  Skins::fontButton * uiScale, button.getButtonText(), on);
     }
 
     void drawToggleButton (juce::Graphics& g, juce::ToggleButton& button, bool, bool) override
@@ -94,19 +170,17 @@ public:
         const auto r = button.getLocalBounds().toFloat().reduced (0.5f);
         const bool on = button.getToggleState();
         const Colour tint = button.findColour (ToggleButton::tickColourId);
-        g.setColour (on ? tint.withAlpha (0.28f) : pal.panelDeep);
-        g.fillRoundedRectangle (r, pal.corner);
-        g.setColour (on ? tint : pal.panelOutline);
-        g.drawRoundedRectangle (r, pal.corner, 1.0f);
+        const bool over = button.isMouseOver();
+        const bool down = button.isMouseButtonDown();
+
+        drawPill (g, r, pal, on, over, down, tint, true,
+                  Skins::fontButton * uiScale, button.getButtonText(), on);
+
         if (button.hasKeyboardFocus (true))
         {
             g.setColour (pal.accent.withAlpha (0.85f));
-            g.drawRoundedRectangle (r.expanded (2.0f), pal.corner + 2.0f, 2.0f);
+            g.drawRoundedRectangle (r.expanded (2.0f), r.getHeight() * 0.5f + 2.0f, 2.0f);
         }
-        g.setColour (on ? pal.text : pal.textDim);
-        g.setFont (Skins::font (Skins::fontButton * uiScale, on ? Font::bold : Font::plain));
-        g.drawFittedText (button.getButtonText(), button.getLocalBounds().reduced (6, 0),
-                          Justification::centred, 1);
     }
 
     std::unique_ptr<juce::FocusOutline> createFocusOutlineForComponent (juce::Component&) override
@@ -144,9 +218,9 @@ public:
         const float angle  = rotaryStartAngle + norm * sweep - MathConstants<float>::halfPi;
         const Colour fill  = slider.findColour (Slider::rotarySliderFillColourId);
 
-        if (slider.hasKeyboardFocus (true))
+        if (slider.hasKeyboardFocus (true) || slider.isMouseOverOrDragging())
         {
-            g.setColour (pal.accent.withAlpha (0.20f));
+            g.setColour (pal.accent.withAlpha (slider.isMouseButtonDown() ? 0.28f : 0.16f));
             g.fillEllipse (cx - outer - 3.0f, cy - outer - 3.0f, (outer + 3.0f) * 2.0f, (outer + 3.0f) * 2.0f);
         }
 

@@ -36,10 +36,11 @@ namespace Skins
         return juce::Font (juce::FontOptions (height, style));
     }
 
-    inline const std::array<Palette, 3>& all()
+    inline const std::array<Palette, 4>& all()
     {
-        static const std::array<Palette, 3> skins = []
-        {            Palette dark;
+        static const std::array<Palette, 4> skins = []
+        {
+            Palette dark;
             dark.name = "Dark";
             dark.background = juce::Colour (0xff181b20);
             dark.panel = juce::Colour (0xff22262d);
@@ -106,7 +107,33 @@ namespace Skins
             console.knobHi = juce::Colour (0xff332f24);
             console.knobLo = juce::Colour (0xff14120e);
 
-            std::array<Palette, 3> result { dark, neon, console };
+            // "Golden": warm gold and bronze on graphite. Accents sit one
+            // golden-section turn apart in hue so every group still reads
+            // distinct while the whole skin stays inside one metal family.
+            Palette gold;
+            gold.name = "Golden";
+            gold.background = juce::Colour (0xff1a1712);
+            gold.panel = juce::Colour (0xff252118);
+            gold.panelDeep = juce::Colour (0xff14110c);
+            gold.panelOutline = juce::Colour (0xff463d2b);
+            gold.gridLine = juce::Colour (0xff2f2a1e);
+            gold.gridLineStrong = juce::Colour (0xff463d2b);
+            gold.text = juce::Colour (0xffe8dfc8);
+            gold.textDim = juce::Colour (0xff96896c);
+            gold.textTick = juce::Colour (0xffa89b7c);
+            gold.accent = juce::Colour (0xffe8b54a);
+            gold.wave = juce::Colour (0xffe8b54a);
+            gold.potential = juce::Colour (0xffc98a3e);
+            gold.env = juce::Colour (0xff9fc39a);
+            gold.filter = juce::Colour (0xffd8b968);
+            gold.fx = juce::Colour (0xffcf7f4a);
+            gold.harmony = juce::Colour (0xffe6d28e);
+            gold.knobTrack = juce::Colour (0xff4a4128);
+            gold.knobHi = juce::Colour (0xff5c5133);
+            gold.knobLo = juce::Colour (0xff191510);
+            gold.corner = 7.0f;
+
+            std::array<Palette, 4> result { dark, neon, console, gold };
         return result;
         }();
         return skins;

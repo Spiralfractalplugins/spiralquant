@@ -5,6 +5,43 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- **Fourth UI skin "Golden"**: warm gold/bronze accents on graphite, selected as
+  the new last entry of the `uiSkin` choice (existing saved 0..2 values keep
+  their meaning; presets are unaffected).
+- **Golden-section HUD layout**: the base 1280×920 grid is now derived from φ.
+  Columns split 768:474 (1.620), the left column splits 520 : 190 : 118 with
+  ADSR : Harmony at 1.610, right-column hero panels (208 px) sit φ above the
+  utility rows (128 px), and the scope splits |ψ(x)| : |ψ(k)| at 0.618.
+- **Regrouped controls**: the Wavefunction panel now holds three hero knobs
+  (SHIFT / WIDTH / IMPULSE, ~φ× larger than the utility knobs) directly under
+  the scope handles; the physics knobs moved to their own "Quantum Evolution"
+  row (DT / STEP / COLLAPSE / QUAD / ZENO / SQUEEZE); the four ADSR knobs sit
+  in a 2×2 block beside the envelope curve (golden split between curve and
+  knobs); Master FX controls live in the panel title band so all six FX knobs
+  regain full panel height.
+- **Pill buttons with LED indicators**: all buttons and toggles render as
+  fully-rounded chips with a soft drop shadow, vertical gradient, accent
+  outline when engaged, a lit LED dot with glow, hover ring and pressed state;
+  combo boxes match the pill language.
+- **Test tooling**: `SpiralQuantTests --render-ui <dir> [w h]` offscreen-renders
+  the HUD once per skin for layout review, and `--bench-extreme` measures the
+  worst-case STEP=0.1 load to verify the evolution-step budget.
+
+### Changed
+- **Performance (bit-exact DSP)**: the per-timestep 1/√N FFT rescale loops are
+  folded into the kinetic phase table (and the inverse-FFT rescale is dropped
+  as the following renormalisation is scale-invariant), the voice sum loop
+  walks a dense pointer table instead of double-indexing, and the 20/30 Hz UI
+  timers use cached parameter pointers instead of name lookups per tick.
+- **Stability under extreme settings**: `samplesPerTimestep < 1` (up to 10
+  demanded evolution steps per sample) is now capped at 4 steps per sample and
+  128 steps per voice per block, so a CPU-exploding setting saturates the
+  evolution rate instead of overflowing the real-time budget; the master
+  limiter drops NaN from the gain follower and re-arms instead of latching.
+- **Correct tail reporting**: `getTailLengthSeconds` now returns 5 s (the
+  RELEASE range) instead of 0, so hosts keep rendering release/FX tails.
+
 ## [0.1.2] - 2026-10-21
 
 The plug-in shipped as VST3 / AU / Standalone; CLAP hosts (Bitwig, Reaper,

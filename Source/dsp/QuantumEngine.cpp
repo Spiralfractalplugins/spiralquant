@@ -255,6 +255,13 @@ void QuantumEngine::applyLimiter (juce::AudioBuffer<float>& buffer)
         const auto mm = juce::FloatVectorOperations::findMinAndMax (ch[c], n);
         peak = juce::jmax (peak, juce::jmax (std::abs (mm.getStart()), std::abs (mm.getEnd())));
     }
+    if (peak != peak) // NaN anywhere in the scan: silence the block, re-arm
+    {
+        for (int c = 0; c < nc; ++c)
+            juce::FloatVectorOperations::clear (ch[c], n);
+        limGain = 1.0f;
+        return;
+    }
     if (peak <= threshold && limGain >= 0.9995f)
     {
         limGain = 1.0f; // released: re-arm the skip path exactly
@@ -269,6 +276,8 @@ void QuantumEngine::applyLimiter (juce::AudioBuffer<float>& buffer)
             float sp = 0.0f;
             for (int c = 0; c < nc; ++c)
                 sp = juce::jmax (sp, std::abs (ch[c][i]));
+            if (sp != sp)
+                sp = 0.0f; // NaN poisons the gain follower; drop it
             const float target = sp > threshold ? threshold / sp : 1.0f;
             limGain += (target - limGain) * (target < limGain ? limAttack : limRelease);
         }
@@ -311,21 +320,26 @@ void QuantumEngine::process (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&
     float* ch0 = (numChannels > 0) ? buffer.getWritePointer (0) : nullptr;
     if (running && ch0 != nullptr)
     {
-        // Voice list resolved once per block; a voice that falls idle mid-block
-        // still returns silence from process(), so the sum is unchanged.
+        // Voice list resolved once per block into a pointer table: the sample
+        // loop then walks a dense array instead of double-indexing through
+        // activeIdx[]. A voice that falls idle mid-block still returns silence
+        // from process(), so the sum is unchanged.
         int activeIdx[MAX_VOICES], nActive = 0;
+        QuantumVoice* active[MAX_VOICES];
         for (int v = 0; v < MAX_VOICES; ++v)
             if (voices[v].isActive())
             {
                 voices[v].prepareBlock();
-                activeIdx[nActive++] = v;
+                activeIdx[nActive] = v;
+                active[nActive] = &voices[v];
+                ++nActive;
             }
 
         for (int i = 0; i < numSamples; ++i)
         {
             float sample = 0.0f;
             for (int k = 0; k < nActive; ++k)
-                sample += voices[activeIdx[k]].process (nullptr);
+                sample += active[k]->process (nullptr);
             ch0[i] = sample;
         }
 

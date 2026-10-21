@@ -1,6 +1,7 @@
 #include <JuceHeader.h>
 #include <cmath>
 #include "PluginProcessor.h"
+#include "gui/Palette.h"
 #include "gui/LogoMark.h"
 
 static void renderLogoImage (const juce::File& file, int size, bool withBackground)
@@ -36,12 +37,58 @@ static int runRenderLogo (const juce::String& outputDir)
     return 0;
 }
 
+/** Offscreen HUD renders, one per skin, for layout review and screenshot
+    updates: --render-ui <dir> [w h] (default 1280x920). */
+static int runRenderUi (const juce::String& outputDir, int w, int h)
+{
+    const juce::File dir (outputDir);
+    dir.createDirectory();
+
+    PluginProcessor proc;
+    proc.prepareToPlay (48000.0, 512);
+    const int numSkins = (int) Skins::all().size();
+    for (int s = 0; s < numSkins; ++s)
+    {
+        if (auto* p = proc.apvts.getParameter ("uiSkin"))
+            p->setValueNotifyingHost ((float) s / (float) (numSkins - 1));
+        Skins::select (s);
+        // A fresh editor picks the palette up in its constructor (the 20 Hz
+        // skin timer has no message loop to run on here).
+        std::unique_ptr<juce::AudioProcessorEditor> ed (proc.createEditor());
+        if (ed == nullptr) { std::cerr << "no editor\n"; return 1; }
+        ed->setSize (w, h);
+
+        juce::Image img (juce::Image::ARGB, w, h, true);
+        {
+            juce::Graphics g (img);
+            ed->paintEntireComponent (g, false);
+        }
+        ed.reset();
+        auto png = dir.getChildFile ("ui-" + juce::String (w) + "x" + juce::String (h) + "-"
+                                     + Skins::all()[(size_t) s].name + ".png");
+        if (auto stream = png.createOutputStream())
+        {
+            juce::PNGImageFormat pngFmt;
+            pngFmt.writeImageToStream (img, *stream);
+        }
+        std::cout << png.getFullPathName() << "\n";
+    }
+    return 0;
+}
+
 int main (int argc = 1, char** argv = nullptr)
 {
     juce::ScopedJuceInitialiser_GUI gui;
 
     if (argc > 2 && juce::String (argv[1]) == "--render-logo")
         return runRenderLogo (argv[2]);
+
+    if (argc > 2 && juce::String (argv[1]) == "--render-ui")
+    {
+        int w = 1280, h = 920;
+        if (argc > 4) { w = juce::String (argv[3]).getIntValue(); h = juce::String (argv[4]).getIntValue(); }
+        return runRenderUi (argv[2], w, h);
+    }
 
     for (int wt = 0; wt < 6; ++wt)
     for (int pt = 0; pt < 6; ++pt)
@@ -626,6 +673,42 @@ int main (int argc = 1, char** argv = nullptr)
         const float* d = buffer.getReadPointer (0);
         for (int i = 0; i < 512; ++i) { if (! std::isfinite (d[i])) { std::cerr << "bench NaN\n"; return 1; } rms += d[i] * d[i]; }
         if (rms <= 0.0f) { std::cerr << "bench silent\n"; return 1; }
+    }
+
+    if (argc > 1 && juce::String (argv[1]) == "--bench-extreme")
+    {
+        // Worst-case load probe: samplesPerTimestep = 0.1 demands ten evolution
+        // steps per sample per voice. The per-block step budget caps this, so
+        // the block time must stay inside the realtime envelope instead of
+        // exploding by an order of magnitude.
+        PluginProcessor proc;
+        proc.prepareToPlay (48000.0, 512);
+        proc.apvts.getParameter ("samplesPerTimestep")->setValueNotifyingHost (0.0f); // min = 0.1
+        proc.apvts.getParameter ("applyWavefunction")->setValueNotifyingHost (1.0f);
+
+        {
+            juce::MidiBuffer midi;
+            for (int n : { 48, 55, 60, 62, 64, 67, 69, 72 })
+                midi.addEvent (juce::MidiMessage::noteOn (1, (juce::uint8) n, (juce::uint8) 100), 0);
+            juce::AudioBuffer<float> buffer (2, 512);
+            proc.processBlock (buffer, midi);
+        }
+
+        const int blocks = 400;
+        juce::AudioBuffer<float> buffer (2, 512);
+        juce::MidiBuffer empty;
+        const double t0 = juce::Time::getMillisecondCounterHiRes();
+        for (int i = 0; i < blocks; ++i)
+            proc.processBlock (buffer, empty);
+        const double us = (juce::Time::getMillisecondCounterHiRes() - t0) * 1000.0 / (double) blocks;
+        const float rt = (float) (us * 48000.0 / 512.0 / 1.0e6);
+        std::cout << "bench-extreme: " << juce::String (us, 1) << " us/block  ("
+                  << juce::String (rt, 3) << " x realtime, 8 voices, STEP=0.1)\n";
+
+        float rms = 0.0f;
+        const float* d = buffer.getReadPointer (0);
+        for (int i = 0; i < 512; ++i) { if (! std::isfinite (d[i])) { std::cerr << "bench-extreme NaN\n"; return 1; } rms += d[i] * d[i]; }
+        if (rms <= 0.0f) { std::cerr << "bench-extreme silent\n"; return 1; }
     }
 
     std::cout << "ALL TESTS PASSED" << std::endl;

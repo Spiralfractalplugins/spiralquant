@@ -93,6 +93,8 @@ void QuantumVoice::setParams (float a, float d, float s, float r,
 
 void QuantumVoice::prepareBlock()
 {
+    osc.beginBlock();  // reset the per-block evolution-step budget
+
     if (coeffsDirty)
     {
         coeffsDirty = false;

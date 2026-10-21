@@ -1,15 +1,33 @@
 #include "PluginEditor.h"
 #include "gui/Palette.h"
 
+// Golden-section base grid (phi = 1.618034):
+//   columns          768 : 474   = 1.620
+//   left column      520 : (190 + 118 + 2 gaps) with adsr : harmony = 190 : 118 = 1.610
+//   right column     hero 208 vs utility 128  = 1.625 (hero = phi x utility)
+//   adsr zone        curve 465 : knobs 289 = 1.609
+// Every sum below closes exactly to the 1280 x 920 frame with 12 px margins
+// and 14 px gutters.
 const juce::Rectangle<int> PluginEditor::headerArea { 12, 8, 1256, 36 };
-const juce::Rectangle<int> PluginEditor::canvasArea { 12, 48, 776, 540 };
-const juce::Rectangle<int> PluginEditor::adsrArea  { 12, 594, 776, 230 };
-const juce::Rectangle<int> PluginEditor::harmonyArea { 12, 830, 776, 82 };
-const juce::Rectangle<int> PluginEditor::waveArea  { 804, 48, 464, 168 };
-const juce::Rectangle<int> PluginEditor::potArea   { 804, 224, 464, 168 };
-const juce::Rectangle<int> PluginEditor::envArea   { 804, 400, 464, 168 };
-const juce::Rectangle<int> PluginEditor::filterArea { 804, 576, 464, 168 };
-const juce::Rectangle<int> PluginEditor::fxArea    { 804, 752, 464, 160 };
+const juce::Rectangle<int> PluginEditor::canvasArea { 12, 52, 768, 520 };
+const juce::Rectangle<int> PluginEditor::adsrArea   { 12, 586, 768, 190 };
+const juce::Rectangle<int> PluginEditor::harmonyArea { 12, 790, 768, 118 };
+const juce::Rectangle<int> PluginEditor::waveArea   { 794, 52, 474, 208 };
+const juce::Rectangle<int> PluginEditor::potArea    { 794, 274, 474, 208 };
+const juce::Rectangle<int> PluginEditor::quantArea  { 794, 496, 474, 128 };
+const juce::Rectangle<int> PluginEditor::filterArea { 794, 638, 474, 128 };
+const juce::Rectangle<int> PluginEditor::fxArea     { 794, 780, 474, 128 };
+
+namespace
+{
+    // Larger share of a golden-section split of `total` with one `gap` removed,
+    // so a + b = total and a / b = phi.
+    constexpr float kPhi = 1.61803398875f;
+    inline int phiSplit (int total, int gap)
+    {
+        return juce::roundToInt ((float) (total - gap) * kPhi / (1.0f + kPhi));
+    }
+}
 
 juce::Colour PluginEditor::accentFor (Group g)
 {
@@ -127,11 +145,15 @@ PluginEditor::PluginEditor (PluginProcessor& p)
         Group group;
         std::initializer_list<KnobSpec> specs;
     };
+    // Knobs are regrouped the way they are used: three hero knobs shape the
+    // wave next to the scope handles, the physics knobs live in their own
+    // Quantum Evolution row, and the ADSR pair sits beside the envelope curve.
     const GroupSpecs groups[] = {
         { Group::Wave, {
             { "waveShift",    "SHIFT",   "Centre of the initial wavefunction in the well.", percent },
             { "waveScale",    "WIDTH",   "Width of the wave packet / spatial frequency.", percent },
-            { "waveImpulse",  "IMPULSE", "Momentum kick baked into the initial wave.", percent },
+            { "waveImpulse",  "IMPULSE", "Momentum kick baked into the initial wave.", percent } } },
+        { Group::Wave, {
             { "timestepDelta","DT",      "Schrodinger evolution step dt. Smaller = smoother wave, more CPU.", dtText },
             { "samplesPerTimestep", "STEP", "Audio samples between evolution steps. Lower = faster wave.", stepText },
             { "jumpRate",   "COLLAPSE", "Phonon-collapse rate: random quantum jumps squeeze the wave (Monte-Carlo wavefunction).", percent },
@@ -186,6 +208,12 @@ PluginEditor::PluginEditor (PluginProcessor& p)
     chordTypeAtt  = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (processor.apvts, "chordType", chordType);
     uiSkinAtt     = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (processor.apvts, "uiSkin", skinCombo);
 
+    // Message-thread parameter pointers, resolved once (no per-tick scans).
+    skinParam     = processor.apvts.getRawParameterValue ("uiSkin");
+    jumpParam     = processor.apvts.getRawParameterValue ("jumpRate");
+    waveTypeParam = processor.apvts.getParameter ("waveType");
+    potTypeParam  = processor.apvts.getParameter ("potentialType");
+
     applySkin();
     resized();  // setSize() above ran before the knobs existed; lay out once now.
     startTimerHz (20);
@@ -233,12 +261,21 @@ juce::Rectangle<int> PluginEditor::scaled (juce::Rectangle<int> r) const
              juce::jmax (1, (int) (r.getWidth() * uiScale)), juce::jmax (1, (int) (r.getHeight() * uiScale)) };
 }
 
-void PluginEditor::layoutKnob (const Knob& k, juce::Rectangle<int> cell)
+void PluginEditor::layoutKnob (const Knob& k, juce::Rectangle<int> cell, int maxKnobD)
 {
     const int textH = juce::jmax (10, (int) (Skins::fontValue * uiScale) + 2);
-    const int knobD = juce::jmax (20, juce::jmin (cell.getWidth() - 4, cell.getHeight() - textH * 2 - 4));
-    k.slider->setBounds (cell.getX() + (cell.getWidth() - knobD) / 2, cell.getY(), knobD, knobD);
-    auto below = cell.withY (cell.getY() + knobD).withHeight (cell.getHeight() - knobD);
+    int knobD = juce::jmin (cell.getWidth() - 4, cell.getHeight() - textH * 2 - 4);
+    if (maxKnobD > 0)
+        knobD = juce::jmin (knobD, juce::roundToInt ((float) maxKnobD * uiScale));
+    knobD = juce::jmax (20, knobD);
+    // Centre the knob + its two labels vertically, so width-limited rows
+    // (Potential's six knobs) do not leave a dead band under the row.
+    const int contentH = knobD + textH * 2;
+    const int y0 = cell.getY() + juce::jmax (0, (cell.getHeight() - contentH) / 2);
+    const int x0 = cell.getX() + (cell.getWidth() - knobD) / 2;
+    k.slider->setBounds (x0, y0, knobD, knobD);
+    juce::Rectangle<int> below (x0, y0 + knobD, knobD,
+                                juce::jmax (textH * 2, cell.getBottom() - (y0 + knobD)));
     k.nameLabel->setBounds (below.removeFromTop (textH));
     k.valueLabel->setBounds (below);
 }
@@ -264,20 +301,40 @@ void PluginEditor::resized()
     presetBrowser.setBounds (scaled ({ 672, 8, 456, 28 }));
 
     canvas.setBounds (scaled (canvasArea));
-    adsrCanvas.setBounds (scaled (adsrArea));
+
+    // Envelope: golden split between the drag curve and its 2x2 knob block.
+    {
+        const int adsrW = juce::roundToInt ((float) adsrArea.getWidth() * uiScale);
+        const int curveW = juce::jmax (60, juce::roundToInt ((float) phiSplit (adsrArea.getWidth(), 14) * uiScale));
+        adsrCanvas.setBounds (scaled (adsrArea).withWidth (curveW));
+        auto knobZone = scaled (adsrArea).withLeft (scaled (adsrArea).getX() + curveW
+                          + juce::jmax (4, (int) (14 * uiScale)))
+                          .withWidth (juce::jmax (10, adsrW - curveW - (int) (14 * uiScale)));
+        const int cellW = knobZone.getWidth() / 2;
+        const int cellH = knobZone.getHeight() / 2;
+        const char* adsrIds[2][2] = { { "attack", "decay" }, { "sustain", "release" } };
+        for (int row = 0; row < 2; ++row)
+            for (int col = 0; col < 2; ++col)
+                for (const auto& k : knobs)
+                    if (k.id == adsrIds[row][col])
+                        layoutKnob (k, knobZone.withX (knobZone.getX() + col * cellW)
+                                           .withY (knobZone.getY() + row * cellH)
+                                           .withWidth (cellW).withHeight (cellH));
+    }
 
     auto layoutPanel = [this] (juce::Rectangle<int> area, bool hasChips,
                                std::function<void (juce::Rectangle<int>)> chips,
-                               std::initializer_list<const char*> ids)
+                               std::initializer_list<const char*> ids,
+                               int maxKnobD = 0)
     {
-        auto inner = scaled (area).reduced (juce::jmax (2, (int) (6 * uiScale)));
-        inner.removeFromTop (juce::jmax (6, (int) (18 * uiScale)));  // title zone
+        auto inner = scaled (area).reduced (juce::jmax (2, (int) (5 * uiScale)));
+        inner.removeFromTop (juce::jmax (6, (int) (17 * uiScale)));  // title zone
         if (hasChips && chips)
         {
-            auto chipRow = inner.removeFromTop (juce::jmax (16, (int) (26 * uiScale)));
+            auto chipRow = inner.removeFromTop (juce::jmax (16, (int) (24 * uiScale)));
             chipRow.removeFromTop (2);
             chips (chipRow);
-            inner.removeFromTop (4);
+            inner.removeFromTop (3);
         }
         const int n = (int) ids.size();
         if (n == 0) return;
@@ -287,44 +344,63 @@ void PluginEditor::resized()
         {
             for (const auto& k : knobs)
                 if (k.id == id)
-                    layoutKnob (k, inner.withX (inner.getX() + i * cellW).withWidth (cellW));
+                    layoutKnob (k, inner.withX (inner.getX() + i * cellW).withWidth (cellW), maxKnobD);
             ++i;
         }
     };
 
+    // Wavefunction hero: three large knobs sit right under the scope handles.
     layoutPanel (waveArea, true, [this] (juce::Rectangle<int> r) {
         waveTypeChip.setBounds (r.removeFromLeft (juce::jmin (r.getWidth() - 220, (int) (150 * uiScale))).reduced (2));
         showFFT.setBounds (r.removeFromLeft ((int) (52 * uiScale)).reduced (2));
         applyQm.setBounds (r.removeFromLeft ((int) (56 * uiScale)).reduced (2));
         sampleMode.setBounds (r.removeFromRight ((int) (116 * uiScale)).reduced (2));
-    }, { "waveShift", "waveScale", "waveImpulse", "timestepDelta", "samplesPerTimestep", "jumpRate", "frftAngle", "zeno", "squeeze" });
+    }, { "waveShift", "waveScale", "waveImpulse" }, heroKnobD);
 
     layoutPanel (potArea, true, [this] (juce::Rectangle<int> r) {
         potentialTypeChip.setBounds (r.removeFromLeft (juce::jmin (r.getWidth() - 120, (int) (160 * uiScale))).reduced (2));
         tunnelChip.setBounds (r.removeFromRight ((int) (92 * uiScale)).reduced (2));
     }, { "potentialShift", "potentialScale", "potentialHeight", "memoryAmt", "memoryTime", "ringdown" });
 
-    layoutPanel (envArea, false, nullptr, { "attack", "decay", "sustain", "release" });
+    layoutPanel (quantArea, false, nullptr,
+                 { "timestepDelta", "samplesPerTimestep", "jumpRate", "frftAngle", "zeno", "squeeze" });
     layoutPanel (filterArea, false, nullptr, { "filterFreq", "filterRes", "drive", "satMix", "gain" });
 
-    layoutPanel (fxArea, true, [this] (juce::Rectangle<int> r) {
-        fxType.setBounds (r.removeFromLeft ((int) (130 * uiScale)).reduced (2));
-        limiterChip.setBounds (r.removeFromRight ((int) (72 * uiScale)).reduced (2));
-        fxSolo.setBounds (r.removeFromRight ((int) (100 * uiScale)).reduced (2));
-    }, { "fxDepth", "fxRate", "fxFeedback", "fxMix", "fxBits", "fxEntropy" });
-
-    // harmony strip
+    // Master FX: the effect selector lives in the title band, so all six knobs
+    // get the full panel height.
     {
-        auto h = scaled (harmonyArea).reduced (juce::jmax (2, (int) (6 * uiScale)));
+        auto inner = scaled (fxArea).reduced (juce::jmax (2, (int) (5 * uiScale)));
+        auto titleRow = inner.removeFromTop (juce::jmax (6, (int) (17 * uiScale)));
+        fxType.setBounds (titleRow.removeFromRight ((int) (108 * uiScale)).reduced (1));
+        fxSolo.setBounds (titleRow.removeFromRight ((int) (82 * uiScale)).reduced (1));
+        limiterChip.setBounds (titleRow.removeFromRight ((int) (66 * uiScale)).reduced (1));
+        const int cellW = inner.getWidth() / 6;
+        int i = 0;
+        for (const char* id : { "fxDepth", "fxRate", "fxFeedback", "fxMix", "fxBits", "fxEntropy" })
+        {
+            for (const auto& k : knobs)
+                if (k.id == id)
+                    layoutKnob (k, inner.withX (inner.getX() + i * cellW).withWidth (cellW));
+            ++i;
+        }
+    }
+
+    // harmony strip: chips sit on a fixed-height centred row, knobs use the
+    // full strip height.
+    {
+        auto h = scaled (harmonyArea).reduced (juce::jmax (2, (int) (5 * uiScale)));
         h.removeFromLeft ((int) (86 * uiScale)); // title zone
-        chordChip.setBounds (h.removeFromLeft ((int) (76 * uiScale)).reduced (2));
-        chordType.setBounds (h.removeFromLeft ((int) (140 * uiScale)).reduced (2));
-        superposeChip.setBounds (h.removeFromLeft ((int) (112 * uiScale)).reduced (2));
-        walkChip.setBounds (h.removeFromLeft ((int) (70 * uiScale)).reduced (2));
-        eprChip.setBounds (h.removeFromLeft ((int) (58 * uiScale)).reduced (2));
+        auto chipCol = h.removeFromLeft (h.getWidth() - (int) (196 * uiScale));
+        const int ctrlH = juce::jmax (16, (int) (28 * uiScale));
+        auto chipRow = chipCol.withSizeKeepingCentre (chipCol.getWidth(), ctrlH);
+        chordChip.setBounds (chipRow.removeFromLeft ((int) (76 * uiScale)).reduced (2));
+        chordType.setBounds (chipRow.removeFromLeft ((int) (140 * uiScale)).reduced (2));
+        superposeChip.setBounds (chipRow.removeFromLeft ((int) (112 * uiScale)).reduced (2));
+        walkChip.setBounds (chipRow.removeFromLeft ((int) (70 * uiScale)).reduced (2));
+        eprChip.setBounds (chipRow.removeFromLeft ((int) (58 * uiScale)).reduced (2));
         for (const char* id : { "pitchShift", "walkRate" })
         {
-            auto knobCell = h.withWidth (juce::jmin (h.getWidth(), (int) (90 * uiScale)));
+            auto knobCell = h.withWidth (juce::jmin (h.getWidth(), (int) (92 * uiScale)));
             if (knobCell.getWidth() >= (int) (50 * uiScale))
                 for (const auto& k : knobs)
                     if (k.id == id)
@@ -346,7 +422,7 @@ void PluginEditor::setGroupAlpha()
 
 void PluginEditor::applySkin()
 {
-    const int idx = juce::roundToInt (processor.apvts.getRawParameterValue ("uiSkin")->load());
+    const int idx = juce::roundToInt (skinParam->load());
     Skins::select (idx);
     const Palette& pal = Skins::current();
     lnf.refreshColours();
@@ -386,22 +462,22 @@ void PluginEditor::applySkin()
 
 void PluginEditor::timerCallback()
 {
-    const int skinIdx = juce::roundToInt (processor.apvts.getRawParameterValue ("uiSkin")->load());
+    const int skinIdx = juce::roundToInt (skinParam->load());
     if (skinIdx != Skins::currentIndex())
     {
         applySkin();
         resized();
     }
 
-    if (auto* p = processor.apvts.getParameter ("waveType"))
+    if (waveTypeParam != nullptr)
     {
-        const juce::String t = "WAVE: " + p->getText (juce::roundToInt (p->getValue() * 5.0f), 0).toUpperCase();
+        const juce::String t = "WAVE: " + waveTypeParam->getText (juce::roundToInt (waveTypeParam->getValue() * 5.0f), 0).toUpperCase();
         if (waveTypeChip.getButtonText() != t)
             waveTypeChip.setButtonText (t);
     }
-    if (auto* p = processor.apvts.getParameter ("potentialType"))
+    if (potTypeParam != nullptr)
     {
-        const juce::String t = "POT: " + p->getText (juce::roundToInt (p->getValue() * 5.0f), 0).toUpperCase();
+        const juce::String t = "POT: " + potTypeParam->getText (juce::roundToInt (potTypeParam->getValue() * 5.0f), 0).toUpperCase();
         if (potentialTypeChip.getButtonText() != t)
             potentialTypeChip.setButtonText (t);
     }
@@ -426,7 +502,7 @@ void PluginEditor::timerCallback()
         superposeChip.setAlpha (chordOn ? 1.0f : 0.45f);
     }
 
-    const bool jumpsOn = processor.apvts.getRawParameterValue ("jumpRate")->load() > 0.0f;
+    const bool jumpsOn = jumpParam->load() > 0.0f;
     if (eprChip.isEnabled() != jumpsOn)
     {
         eprChip.setAlpha (jumpsOn ? 1.0f : 0.45f);
@@ -440,12 +516,12 @@ void PluginEditor::paint (juce::Graphics& g)
     g.fillAll (pal.background);
     const float fs = Skins::fontLabel * uiScale;
 
-    drawSkinnedPanel (g, scaled (waveArea).toFloat(),    pal, "Wavefunction", accentFor (Group::Wave),      fs);
-    drawSkinnedPanel (g, scaled (potArea).toFloat(),     pal, "Potential",    accentFor (Group::Potential), fs);
-    drawSkinnedPanel (g, scaled (envArea).toFloat(),     pal, "Envelope",     accentFor (Group::Env),       fs);
-    drawSkinnedPanel (g, scaled (filterArea).toFloat(),  pal, "Filter & Drive", accentFor (Group::Filter),  fs);
-    drawSkinnedPanel (g, scaled (fxArea).toFloat(),      pal, "Master FX",    accentFor (Group::Fx),        fs);
-    drawSkinnedPanel (g, scaled (harmonyArea).toFloat(), pal, "Harmony",      accentFor (Group::Harmony),   fs);
+    drawSkinnedPanel (g, scaled (waveArea).toFloat(),    pal, "Wavefunction",       accentFor (Group::Wave),      fs);
+    drawSkinnedPanel (g, scaled (potArea).toFloat(),     pal, "Potential",          accentFor (Group::Potential), fs);
+    drawSkinnedPanel (g, scaled (quantArea).toFloat(),   pal, "Quantum Evolution",  accentFor (Group::Wave),      fs);
+    drawSkinnedPanel (g, scaled (filterArea).toFloat(),  pal, "Filter & Drive",     accentFor (Group::Filter),    fs);
+    drawSkinnedPanel (g, scaled (fxArea).toFloat(),      pal, "Master FX",          accentFor (Group::Fx),        fs);
+    drawSkinnedPanel (g, scaled (harmonyArea).toFloat(), pal, "Harmony",            accentFor (Group::Harmony),   fs);
 
     const auto line = scaled ({ 12, 44, 1256, 1 }).toFloat();
     g.setColour (pal.accent.withAlpha (0.35f));

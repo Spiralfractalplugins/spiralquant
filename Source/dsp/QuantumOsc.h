@@ -50,6 +50,8 @@ public:
     /** EPR partner response: apply the annihilation collapse without rolling. */
     void collapseNow();
     void markTablesDirty() { tablesDirty = true; }
+    /** Reset the per-block evolution-step budget (call once per audio block). */
+    void beginBlock() { stepsUsed = 0; }
     void trigger ();
 
     /** Returns one wavetable sample advance. Phase is in [0, SIZE). */
@@ -123,6 +125,14 @@ private:
     float phase = 0.0f;
     float timestepCounter = 0.0f;
     float timestepCountTo = 0.0f;
+
+    // Real-time load guards: a sample may burst at most maxStepsPerSample
+    // evolution steps, and a voice at most blockStepBudget steps per block.
+    // Defaults demand 1 step per STEP=8 samples, so the budget only engages on
+    // extreme settings (samplesPerTimestep < 1) that would otherwise explode.
+    static constexpr int maxStepsPerSample = 4;
+    static constexpr int blockStepBudget = 128;
+    int stepsUsed = 0;
 
     juce::dsp::FFT fft { 7 }; // 2^7 = 128
 };

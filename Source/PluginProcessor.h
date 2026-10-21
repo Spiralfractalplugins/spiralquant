@@ -18,7 +18,9 @@ public:
     const juce::String getName() const override { return "SpiralQuant"; }
     bool acceptsMidi() const override { return true; }
     bool producesMidi() const override { return false; }
-    double getTailLengthSeconds() const override { return 0.0; }
+    /** Release tails run up to 5 s (RELEASE max) and the Fractal comb rings on
+        after that, so hosts that honour the tail must keep rendering. */
+    double getTailLengthSeconds() const override { return 5.0; }
     int getNumPrograms() override { return 1; }
     int getCurrentProgram() override { return 0; }
     void setCurrentProgram (int) override {}

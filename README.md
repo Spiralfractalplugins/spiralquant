@@ -72,8 +72,10 @@ to compile from source.
   comb, plus an output limiter.
 - **Chord mode** with just-intonation voicings, ±48 st pitch shift, ADSR,
   resonant low-pass, drive/saturation.
-- **Three UI skins** (Dark / SciFi Neon / Console) and a live HUD scope showing
-  the actual `|ψ(x)|` and `|ψ̃(k)|` feeding the audio.
+- **Four UI skins** (Dark / SciFi Neon / Console / Golden) and a live HUD scope showing
+  the actual `|ψ(x)|` and `|ψ̃(k)|` feeding the audio. The HUD is laid out on a
+  golden-section grid (φ ≈ 1.618), with pill buttons, LED state indicators and
+  hero-sized wave knobs.
 - **18 factory presets** embedded at build time; user presets as JSON.
 
 <details>
