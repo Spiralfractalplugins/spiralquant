@@ -25,17 +25,20 @@ void AdsrCanvas::updateHandles (float w, float h)
     const float sustainLevel = getRaw ("sustain");
     const float releaseNorm = (getRaw ("release") - 1.0f) / 4999.0f;
 
+    // The graph lives below the reserved title band.
+    const float gh = juce::jmax (20.0f, h - headerH);
+
     // Attack starts at the envelope origin so attack=0 renders a vertical edge.
     const float originX = 0.05f * w;
     const float attackX = originX + attackNorm * 0.20f * w;
     const float decayX  = attackX + 0.10f * w + decayNorm * 0.20f * w;
-    const float sustainY = h - sustainLevel * (h * 0.72f) - h * 0.12f;
+    const float sustainY = headerH + gh - sustainLevel * (gh * 0.72f) - gh * 0.12f;
     const float releaseX = decayX + 0.12f * w + releaseNorm * 0.30f * w;
 
-    attackH  = { attackX, h * 0.12f };
+    attackH  = { attackX, headerH + gh * 0.12f };
     decayH   = { decayX, sustainY };
     sustainH = { (decayX + releaseX) * 0.5f, sustainY };
-    releaseH = { releaseX, h - h * 0.10f };
+    releaseH = { releaseX, headerH + gh - gh * 0.10f };
 }
 
 void AdsrCanvas::paint (juce::Graphics& g)
@@ -44,24 +47,25 @@ void AdsrCanvas::paint (juce::Graphics& g)
     const float w = (float) getWidth();
     const float h = (float) getHeight();
     const float fs = juce::jlimit (7.0f, 12.0f, h * 0.07f);
+    const float gh = juce::jmax (20.0f, h - headerH);
     updateHandles (w, h);
 
     g.fillAll (pal.panelDeep);
     g.setColour (pal.gridLine);
     for (int i = 1; i < 5; ++i)
         g.drawVerticalLine ((int) (w * (float) i / 5.0f), 0, h);
-    g.drawHorizontalLine ((int) (h * 0.5f), 0, h);
+    g.drawHorizontalLine ((int) (headerH + gh * 0.5f), 0, h);
 
     juce::Path env;
-    env.startNewSubPath (w * 0.05f, h - h * 0.08f);
-    env.lineTo (attackH.x, h * 0.12f);
+    env.startNewSubPath (w * 0.05f, headerH + gh - gh * 0.08f);
+    env.lineTo (attackH.x, headerH + gh * 0.12f);
     env.lineTo (decayH.x, decayH.y);
     env.lineTo (releaseH.x, decayH.y);
-    env.lineTo (releaseH.x + (w - releaseH.x) * 0.35f, h - h * 0.08f);
+    env.lineTo (releaseH.x + (w - releaseH.x) * 0.35f, headerH + gh - gh * 0.08f);
 
     juce::Path fill (env);
-    fill.lineTo (releaseH.x + (w - releaseH.x) * 0.35f, h - h * 0.08f);
-    fill.lineTo (w * 0.05f, h - h * 0.08f);
+    fill.lineTo (releaseH.x + (w - releaseH.x) * 0.35f, headerH + gh - gh * 0.08f);
+    fill.lineTo (w * 0.05f, headerH + gh - gh * 0.08f);
     fill.closeSubPath();
     g.setColour (pal.env.withAlpha (0.10f));
     g.fillPath (fill);
@@ -145,7 +149,8 @@ void AdsrCanvas::mouseDrag (const juce::MouseEvent& e)
         {
             const float dNorm = juce::jlimit (0.0f, 1.0f, (e.position.x - attackH.x - 0.10f * w) / (0.20f * w));
             setRaw ("decay", 1.0f + dNorm * 1999.0f, 1.0f, 2000.0f);
-            const float sust = juce::jlimit (0.0f, 1.0f, (h - e.position.y - h * 0.12f) / (h * 0.72f));
+            const float gh = juce::jmax (20.0f, h - headerH);
+            const float sust = juce::jlimit (0.0f, 1.0f, (headerH + gh - e.position.y - gh * 0.12f) / (gh * 0.72f));
             setRaw ("sustain", sust, 0.0f, 1.0f);
             break;
         }

@@ -23,6 +23,10 @@ private:
     Drag dragging = None;
 
     juce::Point<float> attackH, decayH, sustainH, releaseH;
+    // The title band (title + hint) is reserved at the top; the envelope and its
+    // value labels live below it, like the wave canvas. Without this the attack
+    // peak sits under the title in the shorter golden-grid ADSR zone.
+    static constexpr float headerH = 20.0f;
     void updateHandles (float w, float h);
     bool hit (juce::Point<float> p, juce::Point<float> h) const { return p.getDistanceFrom (h) <= 12.0f; }
 
