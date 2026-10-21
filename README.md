@@ -83,7 +83,7 @@ to compile from source.
   the actual `|ψ(x)|` and `|ψ̃(k)|` feeding the audio. The HUD is laid out on a
   golden-section grid (φ ≈ 1.618), with pill buttons, LED state indicators and
   hero-sized wave knobs.
-- **18 factory presets** embedded at build time; user presets as JSON.
+- **24 factory presets** embedded at build time; user presets as JSON.
 
 <details>
 <summary><b>Full feature list</b></summary>
@@ -217,7 +217,7 @@ It must print `ALL TESTS PASSED`.
 | `chordType`          | choice   | Power / Major / Minor / Sus4 / Major7 / Tritone / Cluster / Pythagorean | 1 (Major) |
 | `pitchShift`         | float    | -48 – +48 st (±4800 cents)                    | 0       |
 | `tunnel`             | bool     | —                                             | false   |
-| `uiSkin`             | choice   | Dark / SciFi Neon / Console (UI only)         | 0 (Dark) |
+| `uiSkin`             | choice   | Dark / SciFi Neon / Console / Golden (UI only) | 0 (Dark) |
 | `chordSuperpose`     | bool     | — (chords in quantum superposition)           | false   |
 | `jumpRate`           | float    | 0.0 – 1.0 (phonon-collapse rate)              | 0.0     |
 | `frftAngle`          | float    | 0.0 – 1.0 (quadrature rotation x↔k)           | 0.0     |
@@ -427,8 +427,8 @@ Preset I/O lives in `Source/gui/PresetBrowser.h` using a small JSON format
 ```
 
 `presets/` is embedded at build time (when populated); an empty folder produces
-no factory presets and no errors. Eighteen factory presets ship with the plug-in
-(`01_Init` … `18_Momentum_Readout`); picking one from the browser dropdown recalls
+no factory presets and no errors. Twenty-four factory presets ship with the plug-in
+(`01_Init` … `24_Loschmidt_Reverse`); picking one from the browser dropdown recalls
 it immediately, `LOAD` re-applies the current selection, `SAVE` writes every
 parameter to a user preset in app-support.
 

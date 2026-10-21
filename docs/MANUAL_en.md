@@ -236,7 +236,7 @@ AMT the echo level). Rhythmic reversed echoes at the window period.
 
 ## 6. Skins
 
-The header combo (Dark / SciFi Neon / Console) changes colours only, never
+The header combo (Dark / SciFi Neon / Console / Golden) changes colours only, never
 behaviour. The choice is saved with the plugin state.
 
 ## 7. MIDI
