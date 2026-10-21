@@ -132,23 +132,27 @@ def width(s, f, tracking=0):
     return sum(d.textlength(c, font=f) + tracking for c in s) - tracking
 
 
-def bullets(img, items, x, y, w, f_head, f_sub, gap, dot_r=9):
-    d = ImageDraw.Draw(img)
+def bullets(img, items, x, y, w, f_head, f_sub, gap, dot_r=9, dry=False):
+    """Draws the bullet list; with img=None it only measures the height."""
+    d = None if img is None else ImageDraw.Draw(img)
     for head, sub in items:
-        d.ellipse([x, y + f_head.size * 0.30 - dot_r, x + dot_r * 2,
-                   y + f_head.size * 0.30 + dot_r], fill=POT)
-        text(d, (x + dot_r * 2 + 22, y), head, f_head, INK)
+        if d is not None:
+            d.ellipse([x, y + f_head.size * 0.30 - dot_r, x + dot_r * 2,
+                       y + f_head.size * 0.30 + dot_r], fill=POT)
+            text(d, (x + dot_r * 2 + 22, y), head, f_head, INK)
         yy = y + f_head.size + 10
         line = ""
         for word in sub.split():
             if width(line + " " + word, f_sub) > w - dot_r * 2 - 22:
-                text(d, (x + dot_r * 2 + 22, yy), line, f_sub, MUTED)
+                if d is not None:
+                    text(d, (x + dot_r * 2 + 22, yy), line, f_sub, MUTED)
                 yy += int(f_sub.size * 1.32)
                 line = word
             else:
                 line = (line + " " + word).strip()
         if line:
-            text(d, (x + dot_r * 2 + 22, yy), line, f_sub, MUTED)
+            if d is not None:
+                text(d, (x + dot_r * 2 + 22, yy), line, f_sub, MUTED)
             yy += f_sub.size
         y = yy + gap
     return y
@@ -199,9 +203,13 @@ COPY = {
             ("Cavity & master FX", "MEMORY lag resonator, RING cavity leak, Flanger / "
                                    "Phaser / Bitcrush / Fractal tonal tail, limiter; "
                                    "live |ψ(x)| scope and |ψ(k)| spectrum"),
+            ("Quantum Lab", "Ten research effects in one strip: GP saturation, a "
+                            "WKB tunnelling filter, a dispersive phaser, dynamical "
+                            "+ Berry phase, Bose/Fermi exchange, Anderson reverb, "
+                            "adiabatic pitch, Born-rule gates, mode clip, Loschmidt echo"),
         ],
-        "chips": ["VST3", "AU", "STANDALONE", "macOS", "Windows"],
-        "foot": "8 voices  ·  3 skins  ·  18 factory presets",
+        "chips": ["VST3", "AU", "CLAP", "STANDALONE", "macOS", "Windows", "Linux"],
+        "foot": "8 voices  ·  4 skins  ·  24 factory presets",
         "author": "by Spiralfractal",
     },
     "ru": {
@@ -230,14 +238,19 @@ COPY = {
                                            "полости, Flanger / Phaser / Bitcrush / "
                                            "Fractal, лимитер; живой осциллограф "
                                            "|ψ(x)| и спектр |ψ(k)|"),
+            ("Quantum Lab", "Десять эффектов в одной полосе: насыщение "
+                            "Гросса–Питаевского, WKB-фильтр, квантовый фазер, "
+                            "динамическая и берриевская фаза, обмен Бозе/Ферми, "
+                            "реверберанс Андерсона, адиабатический питч, события по "
+                            "правилу Борна, обрезка мод, задержка Лошмидта"),
         ],
-        "chips": ["VST3", "AU", "STANDALONE", "macOS", "Windows"],
-        "foot": "8 голосов  ·  3 скина  ·  18 фабричных пресетов",
+        "chips": ["VST3", "AU", "CLAP", "STANDALONE", "macOS", "Windows", "Linux"],
+        "foot": "8 голосов  ·  4 скина  ·  24 фабричных пресетов",
         "author": "автор Spiralfractal",
     },
 }
 
-VERSION = "v0.1.1"
+VERSION = "v0.2.0"
 
 
 def post(lang):
@@ -260,9 +273,19 @@ def post(lang):
     text(d, (x + 6, 316), c["tagline"], font(size=27, bold=True), WAVE, tracking=2)
     d.line([(x + 4, 370), (2452, 370)], fill=(52, 66, 84), width=3)
 
+    # Fit the bullet column: the Russian copy runs longer, so step the body
+    # text down a size until the byline still clears the last bullet.
+    body, gap = 24, 16
+    for body, gap in ((24, 16), (22, 13), (20, 11)):
+        end = bullets(None, c["bullets"], x + 6, 396, 930,
+                      font(size=30, bold=True), font(size=body), gap=gap)
+        if end + 34 + 78 <= 1400:
+            break
     y = bullets(img, c["bullets"], x + 6, 396, 930,
-                font(size=30, bold=True), font(size=24), gap=16)
-    y = min(y + 30, 1216)
+                font(size=30, bold=True), font(size=body), gap=gap)
+    # Seven bullets can reach the bottom of the column: keep the byline clear
+    # of the last one instead of clamping it up into the text.
+    y = min(y + 34, 1252)
     text(d, (x + 6, y), c["author"], font(size=42, bold=True), WAVE, tracking=1)
     text(d, (x + 8, y + 74), VERSION, font(size=28, bold=True), MUTED)
     return img

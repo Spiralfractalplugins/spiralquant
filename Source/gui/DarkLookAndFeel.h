@@ -163,6 +163,12 @@ public:
                   Skins::fontButton * uiScale, button.getButtonText(), on);
     }
 
+    // drawPill already renders the label; JUCE would draw the same string a
+    // second time on top of it, which reads as doubled, blurry text.
+    void drawButtonText (juce::Graphics&, juce::TextButton&, bool, bool) override
+    {
+    }
+
     void drawToggleButton (juce::Graphics& g, juce::ToggleButton& button, bool, bool) override
     {
         using namespace juce;

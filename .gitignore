@@ -51,3 +51,4 @@ vendor/
 dist/*
 !dist/README.md
 .licenses/
+.mypy_cache/

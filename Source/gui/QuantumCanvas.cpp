@@ -103,16 +103,20 @@ void QuantumCanvas::paint (juce::Graphics& g)
 
     // ---- |psi(x)| panel -------------------------------------------------
     drawSkinnedPanel (g, wp, pal, "", pal.wave, fs);
+    // JUCE 8: removeFromTop returns the REMOVED strip - that strip is the
+    // title row, so the panel title sits on the left of it and the wave name
+    // on the right of it.
+    const auto waveStrip = wp.reduced (12).removeFromTop (20);
     g.setColour (pal.textDim);
     g.setFont (Skins::font (fs, juce::Font::bold));
-    g.drawText ("|PSI(X)|  REAL-SPACE WAVE", wp.reduced (12).removeFromTop (20).removeFromLeft (10),
+    g.drawText ("|PSI(X)|  REAL-SPACE WAVE", waveStrip.reduced (10.0f, 0.0f),
                 juce::Justification::centredLeft, false);
     const int wt = juce::roundToInt (raw ("waveType")->load());
     if (auto* p = apvts().getParameter ("waveType"))
     {
         g.setColour (pal.wave);
         g.setFont (Skins::font (fs));
-        g.drawText (p->getText (wt, 0).toUpperCase(), wp.reduced (12).removeFromTop (20).withWidth (200),
+        g.drawText (p->getText (wt, 0).toUpperCase(), waveStrip.reduced (10.0f, 0.0f),
                     juce::Justification::centredRight, false);
     }
 
@@ -203,9 +207,10 @@ void QuantumCanvas::paint (juce::Graphics& g)
     // ---- |psi(k)| spectrum panel -----------------------------------------
     const bool fftOn = pShowFFT->load() > 0.5f;
     drawSkinnedPanel (g, sp, pal, "", pal.harmony, fs);
+    const auto specStrip = sp.reduced (12).removeFromTop (20);
     g.setColour (fftOn ? pal.accent : pal.textDim);
     g.setFont (Skins::font (fs, juce::Font::bold));
-    g.drawText ("|PSI(K)|  MOMENTUM SPECTRUM", sp.reduced (12).removeFromTop (20).removeFromLeft (10),
+    g.drawText ("|PSI(K)|  MOMENTUM SPECTRUM", specStrip.reduced (10.0f, 0.0f),
                 juce::Justification::centredLeft, false);
     if (fftOn)
     {
@@ -217,7 +222,7 @@ void QuantumCanvas::paint (juce::Graphics& g)
     const juce::String f0Text = f0 > 0.0f ? juce::String (f0, 0) + " Hz" : juce::String ("-");
     g.setColour (pal.textDim);
     g.setFont (Skins::font (fs * 0.9f));
-    g.drawText ("f0 " + f0Text, sp.reduced (12).removeFromTop (20).withWidth (160),
+    g.drawText ("f0 " + f0Text, specStrip.reduced (10.0f, 0.0f),
                 juce::Justification::centredRight, false);
 
     const juce::Rectangle<float> sPlot = sp.reduced (14.0f, 24.0f).withTop (sp.getY() + 22.0f).withBottom (sp.getBottom() - 10.0f);
@@ -239,18 +244,32 @@ void QuantumCanvas::paint (juce::Graphics& g)
         }
     }
 
-    // vertical harmonic grid with bin + Hz labels
+    // vertical harmonic grid with bin labels
+    // The first two harmonics sit only a couple of bins apart, so every label
+    // is centred on its own tick and one that would still collide with the
+    // previous label is left out instead of being drawn on top of it.
+    g.setFont (Skins::font (fs * 0.8f));
+    float lastLabelRight = -1.0e9f;
     for (int b : { 1, 2, 4, 8, 16, 32, 63 })
     {
         const float x = sPlot.getX() + sPlot.getWidth() * (float) (b - 1) / (float) (bins - 2);
         g.setColour (pal.gridLine);
         g.drawVerticalLine ((int) x, sPlot.getY(), sPlot.getBottom());
+
+        if (b == 1)
+            continue;                    // the fundamental is named in the header
+
         g.setColour (pal.textTick);
-        const juce::String label = f0 > 0.0f
-            ? juce::String (b) + "\u00b7f\u2080  " + juce::String (b * f0, 0) + "Hz"
-            : juce::String (b) + "\u00b7f\u2080";
-        g.drawText (label, juce::Rectangle<float> (x - 22.0f, sPlot.getBottom() + 1.0f, 60.0f, 10.0f),
+        const juce::String label = juce::String (b) + "\u00b7f\u2080";
+        const float tw = juce::GlyphArrangement::getStringWidth (g.getCurrentFont(), label);
+        float lx = x - tw * 0.5f;
+        lx = juce::jmax (sPlot.getX() - 6.0f, juce::jmin (lx, sp.getRight() - tw - 6.0f));
+        if (lx < lastLabelRight + 8.0f)
+            continue;                    // too close to the previous label
+
+        g.drawText (label, juce::Rectangle<float> (lx, sPlot.getBottom() + 1.0f, tw, 10.0f),
                     juce::Justification::centredLeft, false);
+        lastLabelRight = lx + tw;
     }
 
     // spectrum curve
