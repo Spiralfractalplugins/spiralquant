@@ -28,6 +28,14 @@ private:
     std::atomic<float>* raw (const char* id) const { return processor.apvts.getRawParameterValue (id); }
     void setNorm (const char* id, float norm);
 
+    // Cached for the 30 Hz timer poll and the per-mouse-move handle update.
+    std::atomic<float>* pWaveShift = nullptr;
+    std::atomic<float>* pWaveScale = nullptr;
+    std::atomic<float>* pPotShift = nullptr;
+    std::atomic<float>* pPotScale = nullptr;
+    std::atomic<float>* pPotHeight = nullptr;
+    std::atomic<float>* pShowFFT = nullptr;
+
     enum Drag { None, WaveCenter, WaveScale, PotCenter, PotHeight, PotScale };
     Drag dragging = None;
 

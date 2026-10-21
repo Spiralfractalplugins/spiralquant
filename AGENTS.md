@@ -82,8 +82,10 @@ Expected test output ends with `ALL TESTS PASSED`.
   `processor.snapshotScope()` on a 30 Hz timer and repaints only when the
   sequence counter changes. The reader never blocks the audio thread.
 - UI colours come from `Source/gui/Palette.h` (`Skins::current()`); skins are
-  Dark / SciFi Neon / Console, selected by the UI-only `uiSkin` APVTS param.
-  `PluginEditor` lays out a fixed 1280×920 base grid scaled by `uiScale`.
+  Dark / SciFi Neon / Console / Golden, selected by the UI-only `uiSkin` APVTS param.
+  `PluginEditor` lays out a fixed 1280×920 base grid scaled by `uiScale`; the
+  grid proportions derive from the golden section (see the phi comments at the
+  top of `PluginEditor.cpp`) — keep new panels/knob groups on that grid.
 - CLAP reuses the same `AudioProcessor` shared code as VST3/AU; the host
   transfers state and presets through the standard `setStateInformation`, so
   no CLAP-specific code lives in `Source/`.

@@ -33,7 +33,7 @@ private:
 
     void addKnob (const char* id, const juce::String& title, const juce::String& tooltip,
                   Group group, ValueSlider::FormatFn format);
-    void layoutKnob (const Knob& k, juce::Rectangle<int> cell);
+    void layoutKnob (const Knob& k, juce::Rectangle<int> cell, int maxKnobD = 0);
     juce::Rectangle<int> scaled (juce::Rectangle<int> r) const;
     void applySkin();
     void setGroupAlpha();
@@ -60,14 +60,27 @@ private:
     std::vector<Knob> knobs;
     std::vector<ValueSlider*> fxKnobs;
     juce::Slider* pitchKnob = nullptr;
+
+    // Cached message-thread accessors: the 20 Hz timer no longer walks the
+    // APVTS parameter list by name on every tick.
+    std::atomic<float>* skinParam = nullptr;
+    std::atomic<float>* jumpParam = nullptr;
+    juce::RangedAudioParameter* waveTypeParam = nullptr;
+    juce::RangedAudioParameter* potTypeParam = nullptr;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> sampleModeAtt, fxTypeAtt,
         fxSoloAtt, chordTypeAtt, uiSkinAtt;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> showFFTAtt, applyQmAtt,
         chordAtt, tunnelAtt, superposeAtt, walkAtt, limiterAtt, eprAtt;
 
     // Base-grid rectangles (design units; every bound goes through scaled()).
+    // The grid is derived from the golden section: columns split 768:474 (=1.620),
+    // the left column splits 520:190:118 with adsr/harmony at 1.610, and the right
+    // column's hero panels (208) sit phi times above the utility panels (128).
     static const juce::Rectangle<int> headerArea, canvasArea, adsrArea, harmonyArea,
-        waveArea, potArea, envArea, filterArea, fxArea;
+        waveArea, potArea, quantArea, filterArea, fxArea;
+
+    // Hero knobs (Wavefunction panel) cap at phi x the ~75 px utility knob.
+    static constexpr int heroKnobD = 122;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PluginEditor)
 };

@@ -4,6 +4,14 @@
 
 QuantumCanvas::QuantumCanvas (PluginProcessor& p) : processor (p)
 {
+    // Cache the raw parameter pointers once: timerCallback polls them at 30 Hz
+    // and getRawParameterValue would otherwise scan the APVTS list by name.
+    pWaveShift = p.apvts.getRawParameterValue ("waveShift");
+    pWaveScale = p.apvts.getRawParameterValue ("waveScale");
+    pPotShift  = p.apvts.getRawParameterValue ("potentialShift");
+    pPotScale  = p.apvts.getRawParameterValue ("potentialScale");
+    pPotHeight = p.apvts.getRawParameterValue ("potentialHeight");
+    pShowFFT   = p.apvts.getRawParameterValue ("showFFT");
     startTimerHz (30);
 }
 
@@ -35,7 +43,8 @@ juce::Rectangle<float> QuantumCanvas::wavePanel() const
 {
     const auto b = getLocalBounds().toFloat().reduced (1.0f);
     const float gap = 6.0f;
-    const float split = b.getY() + b.getHeight() * 0.60f;
+    // Golden-section split: |psi(x)| : |psi(k)| = 0.618 : 0.382.
+    const float split = b.getY() + b.getHeight() * 0.618034f;
     return { b.getX(), b.getY(), b.getWidth(), split - b.getY() };
 }
 
@@ -43,7 +52,7 @@ juce::Rectangle<float> QuantumCanvas::spectrumPanel() const
 {
     const auto b = getLocalBounds().toFloat().reduced (1.0f);
     const float gap = 6.0f;
-    const float split = b.getY() + b.getHeight() * 0.60f;
+    const float split = b.getY() + b.getHeight() * 0.618034f;
     return { b.getX(), split + gap, b.getWidth(), b.getBottom() - split - gap };
 }
 
@@ -55,23 +64,24 @@ void QuantumCanvas::updateHandles()
     const float waveY = plot.getY() + plot.getHeight() * 0.30f;
     const float potBase = plot.getBottom();
 
-    const float potX = cx + unitToXNorm (raw ("potentialShift")->load()) * halfW;
-    const float waveX = cx + unitToXNorm (raw ("waveShift")->load()) * halfW;
+    const float potX = cx + unitToXNorm (pPotShift->load()) * halfW;
+    const float waveX = cx + unitToXNorm (pWaveShift->load()) * halfW;
     waveCenterH = { waveX, waveY };
-    waveScaleH = { waveX + 12.0f + raw ("waveScale")->load() * (halfW * 0.35f), waveY };
+    waveScaleH = { waveX + 12.0f + pWaveScale->load() * (halfW * 0.35f), waveY };
     potCeiling = plot.getY() + plot.getHeight() * 0.55f;
     const float potSpan = potBase - potCeiling;
     potCenterH = { potX, potBase };
-    potHeightH = { potX, potBase - potSpan * raw ("potentialHeight")->load() };
-    potScaleH = { potX + (0.08f + raw ("potentialScale")->load() * 0.28f) * plot.getWidth(), potBase };
+    potHeightH = { potX, potBase - potSpan * pPotHeight->load() };
+    potScaleH = { potX + (0.08f + pPotScale->load() * 0.28f) * plot.getWidth(), potBase };
 }
 
 void QuantumCanvas::timerCallback()
 {
     const unsigned seq = processor.getScopeSeq();
-    const float sig = raw ("waveShift")->load() + raw ("waveScale")->load() * 2.0f
-                    + raw ("potentialShift")->load() * 4.0f + raw ("potentialScale")->load() * 8.0f
-                    + raw ("potentialHeight")->load() * 16.0f + raw ("showFFT")->load() * 32.0f;
+    // Cached atomic pointers: the 30 Hz poll must not walk the APVTS by name.
+    const float sig = pWaveShift->load() + pWaveScale->load() * 2.0f
+                    + pPotShift->load() * 4.0f + pPotScale->load() * 8.0f
+                    + pPotHeight->load() * 16.0f + pShowFFT->load() * 32.0f;
     if (seq == lastSeq && sig == lastHandleSig)
         return;
     lastSeq = seq;
@@ -191,7 +201,7 @@ void QuantumCanvas::paint (juce::Graphics& g)
     drawHandle (potScaleH, pal.potential.brighter (0.4f));
 
     // ---- |psi(k)| spectrum panel -----------------------------------------
-    const bool fftOn = raw ("showFFT")->load() > 0.5f;
+    const bool fftOn = pShowFFT->load() > 0.5f;
     drawSkinnedPanel (g, sp, pal, "", pal.harmony, fs);
     g.setColour (fftOn ? pal.accent : pal.textDim);
     g.setFont (Skins::font (fs, juce::Font::bold));

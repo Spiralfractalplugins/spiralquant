@@ -48,6 +48,11 @@ void QuantumOsc::rebuildTables()
 {
     const float dt = timestepDelta;
     const float PRE = std::pow (juce::MathConstants<float>::twoPi / (float) SIZE, 2) * dt;
+    // The forward-FFT 1/sqrt(N) scale is folded into the kinetic table, so every
+    // timestep skips a 128-element complex scale loop. The inverse-FFT scale is
+    // dropped entirely: the renormalisation that always follows it makes the
+    // result scale-invariant (normalise(c*psi) == normalise(psi)).
+    const float invSqrtN = 1.0f / std::sqrt (SIZE_F);
 
     for (int i = 0; i < SIZE; ++i)
         potPhase[i] = std::polar (1.0f, dt * potential[i]);
@@ -55,7 +60,7 @@ void QuantumOsc::rebuildTables()
     for (int i = 0; i < SIZE; ++i)
     {
         const int k = (i <= SIZE / 2) ? i : i - SIZE;
-        kinPhase[i] = std::polar (1.0f, PRE * (float) (k * k));
+        kinPhase[i] = std::polar (1.0f, PRE * (float) (k * k)) * invSqrtN;
     }
 
     tableDt = dt;
@@ -242,19 +247,18 @@ void QuantumOsc::doTimestep (float dt)
 
     // FFT to momentum domain
     fft.perform (psi, psiFFT, false);
-    const float invSqrt = 1.0f / std::sqrt ((float) SIZE);
-    for (int i = 0; i < SIZE; ++i) psiFFT[i] *= invSqrt;
 
-    // kinetic part
+    // kinetic part (the 1/sqrt(N) forward scale is folded into the table)
     for (int i = 0; i < SIZE; ++i)
         psiFFT[i] *= kinPhase[i];
 
     if (! showFFT)
     {
         fft.perform (psiFFT, psi, true);
-        for (int i = 0; i < SIZE; ++i) psi[i] *= invSqrt;
 
-        // barrier mask + norm accumulation in one pass
+        // barrier mask + norm accumulation in one pass. The inverse FFT left
+        // psi scaled by sqrt(N); the normalise below is scale-invariant, so no
+        // separate rescale pass is needed.
         float s = 0.0f;
         for (int i = 0; i < SIZE; ++i)
         {
@@ -444,7 +448,7 @@ void QuantumOsc::applySqueeze()
 
 float QuantumOsc::getNextSample (float phaseIncrement)
 {
-    if (applyWavefunction)
+    if (applyWavefunction && stepsUsed < blockStepBudget)
     {
         if (samplesPerTimestep >= 1.0f)
         {
@@ -452,15 +456,23 @@ float QuantumOsc::getNextSample (float phaseIncrement)
             if (timestepCounter >= samplesPerTimestep)
             {
                 doTimestep (timestepDelta);
+                ++stepsUsed;
                 timestepCounter = 0.0f;
             }
         }
         else
         {
+            // Load guard: samplesPerTimestep < 1 demands up to 1/spt evolution
+            // steps per sample. Cap the burst so an extreme setting saturates
+            // the evolution rate instead of overflowing the real-time budget.
+            int burst = 0;
             while (timestepCounter < 1.0f)
             {
                 timestepCounter += samplesPerTimestep;
                 doTimestep (timestepDelta);
+                ++stepsUsed;
+                if (++burst >= maxStepsPerSample || stepsUsed >= blockStepBudget)
+                    break;
             }
             timestepCounter = std::fmod (timestepCounter, 1.0f);
         }

@@ -63,7 +63,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     params.push_back (bl ("tunnel", "Tunneling", false));
 
     // UI-only (appended last: host index stability). Not read on the audio thread.
-    params.push_back (choice ("uiSkin", "UI Skin", { "Dark","SciFi Neon","Console" }, 0));
+    // Adding a skin appends an option; existing 0..2 values keep their meaning.
+    params.push_back (choice ("uiSkin", "UI Skin", { "Dark","SciFi Neon","Console","Golden" }, 0));
 
     // Phonon update (appended at the very end: host index stability).
     params.push_back (bl ("chordSuperpose", "Superpose Chords", false));
