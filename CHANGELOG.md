@@ -76,6 +76,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Correct tail reporting**: `getTailLengthSeconds` now returns 5 s (the
   RELEASE range) instead of 0, so hosts keep rendering release/FX tails.
 
+### Fixed
+- **ADSR canvas**: the title band ("ADSR" and the drag hint) is now reserved,
+  so the attack peak and its value label no longer collide with the heading in
+  the shorter golden-grid ADSR zone.
+
 ## [0.1.2] - 2026-10-21
 
 The plug-in shipped as VST3 / AU / Standalone; CLAP hosts (Bitwig, Reaper,
