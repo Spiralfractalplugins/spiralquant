@@ -80,6 +80,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **ADSR canvas**: the title band ("ADSR" and the drag hint) is now reserved,
   so the attack peak and its value label no longer collide with the heading in
   the shorter golden-grid ADSR zone.
+- **Scope panel titles**: JUCE 8 changed `removeFromTop`/`removeFromLeft` to
+  return the *removed* strip instead of the remainder, so the `|ψ(x)|` and
+  `|ψ(k)|` headings were being drawn into a 10x20 sliver and the wave / f0
+  names sat on the left instead of the right. Both titles are back, on their
+  own title row.
+- **Chip labels**: `drawPill` already draws the button label and JUCE drew it
+  a second time on top, which read as doubled, blurry text on every pill and
+  button. The label is now drawn once.
+- **Momentum spectrum ticks**: the harmonic labels under the `|ψ(k)|` graph
+  overlapped each other (1·f0 against 2·f0) and the last one was clipped by
+  the panel edge. Each is centred on its own tick now, and one that would
+  still collide is left out.
 
 ## [0.1.2] - 2026-10-21
 
