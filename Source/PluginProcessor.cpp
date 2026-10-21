@@ -88,6 +88,20 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     params.push_back (bl ("entangle", "Entangle Voices", false));
     params.push_back (flt ("squeeze", "Squeeze", -1.0f, 1.0f, 0.0f));
 
+    // Wave 4: Quantum Lab — evolution-level effects, exchange symmetry and the
+    // master lab FX (appended at the very end: host index stability).
+    params.push_back (flt ("gpSat", "GP Saturation", 0.0f, 1.0f, 0.0f));
+    params.push_back (flt ("wkbFilter", "WKB Tunnel Filter", 0.0f, 1.0f, 0.0f));
+    params.push_back (flt ("qPhaser", "Quantum Phaser", 0.0f, 1.0f, 0.0f));
+    params.push_back (flt ("phaseAccum", "Phase Accumulation", 0.0f, 1.0f, 0.0f));
+    params.push_back (choice ("interfere", "Exchange Symmetry", { "Off","Bose","Fermi" }, 0));
+    params.push_back (choice ("labType", "Quantum Lab FX",
+        { "Off","Anderson Reverb","Adiabatic Pitch","Born Events","Mode Clip","Loschmidt Delay" }, 0));
+    params.push_back (flt ("labAmt", "Lab Amount", 0.0f, 1.0f, 0.5f));
+    params.push_back (flt ("labChar", "Lab Character", -1.0f, 1.0f, 0.0f));
+    params.push_back (flt ("labSize", "Lab Size", 0.0f, 1.0f, 0.5f));
+    params.push_back (flt ("labMix", "Lab Mix", 0.0f, 1.0f, 0.5f));
+
     return { params.begin(), params.end() };
 }
 
@@ -112,7 +126,10 @@ PluginProcessor::ParamCache PluginProcessor::makeParamCache() const
              r ("chordMode"), r ("chordType"), r ("pitchShift"), r ("tunnel"),
              r ("chordSuperpose"), r ("jumpRate"), r ("frftAngle"),
              r ("memoryAmt"), r ("memoryTime"), r ("ringdown"), r ("walkOn"), r ("walkRate"),
-             r ("limiter"), r ("zeno"), r ("entangle"), r ("squeeze") };
+             r ("limiter"), r ("zeno"), r ("entangle"), r ("squeeze"),
+             r ("gpSat"), r ("wkbFilter"), r ("qPhaser"), r ("phaseAccum"),
+             r ("interfere"), r ("labType"), r ("labAmt"), r ("labChar"),
+             r ("labSize"), r ("labMix") };
 }
 
 void PluginProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
@@ -152,6 +169,14 @@ void PluginProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
         params.walkOn->load() >= 0.5f, params.walkRate->load(),
         params.limiter->load() >= 0.5f,
         params.zeno->load(), params.entangle->load() >= 0.5f, params.squeeze->load());
+
+    engine.setQuantumLab (
+        params.gpSat->load(), params.wkbFilter->load(), params.qPhaser->load(),
+        params.phaseAccum->load(),
+        static_cast<int> (params.interfere->load()),
+        static_cast<int> (params.labType->load()),
+        params.labAmt->load(), params.labChar->load(),
+        params.labSize->load(), params.labMix->load());
 
     engine.setFxParams (
         static_cast<int> (params.fxType->load()),

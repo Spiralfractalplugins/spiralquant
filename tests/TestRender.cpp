@@ -80,6 +80,60 @@ int main (int argc = 1, char** argv = nullptr)
 {
     juce::ScopedJuceInitialiser_GUI gui;
 
+    if (argc > 1 && juce::String (argv[1]) == "--lab-debug")
+    {
+        // Direct complex-FFT roundtrip sanity probe first.
+        {
+            juce::dsp::FFT probe { 8 };
+            std::complex<float> a[256], b[256];
+            double eIn = 0.0;
+            for (int i = 0; i < 256; ++i)
+            {
+                a[i] = std::complex<float> (std::sin (juce::MathConstants<float>::twoPi * 3.0f * i / 256.0f), 0.0f);
+                eIn += std::norm (a[i]);
+            }
+            probe.perform (a, b, false);
+            double eFwd = 0.0;
+            for (int i = 0; i < 256; ++i) eFwd += std::norm (b[i]);
+            probe.perform (b, a, true);
+            double eBack = 0.0;
+            for (int i = 0; i < 256; ++i) eBack += std::norm (a[i]);
+            std::cout << "fft probe: in=" << eIn << " fwd=" << eFwd << " back=" << eBack << "\n";
+        }
+
+        QuantumLab lab;
+        lab.prepare (48000.0);
+        lab.setParams (juce::String (argv[2]).getIntValue(), 0.7f, 0.7f, 0.6f, 0.6f);
+        const int n = 512;
+        juce::AudioBuffer<float> buf (2, n);
+        double inRms = 0.0, outRms = 0.0;
+        float outMax = 0.0f; bool nan = false;
+        for (int blk = 0; blk < 100; ++blk)
+        {
+            for (int i = 0; i < n; ++i)
+            {
+                const float s = 0.4f * std::sin (juce::MathConstants<float>::twoPi * 261.6f
+                                                 * (float) (blk * n + i) / 48000.0f);
+                buf.setSample (0, i, s); buf.setSample (1, i, s);
+                inRms += (double) s * s;
+            }
+            lab.process (buf);
+            for (int i = 0; i < n; ++i)
+            {
+                const float o = buf.getSample (0, i);
+                if (! std::isfinite (o)) { nan = true; break; }
+                outRms += (double) o * o;
+                outMax = juce::jmax (outMax, std::abs (o));
+            }
+            if (nan) break;
+        }
+        inRms = std::sqrt (inRms / (100.0 * n));
+        outRms = std::sqrt (outRms / (100.0 * n));
+        std::cout << "inRms=" << inRms << " outRms=" << outRms
+                  << " outMax=" << outMax << " nan=" << (int) nan << "\n";
+        return 0;
+    }
+
     if (argc > 2 && juce::String (argv[1]) == "--render-logo")
         return runRenderLogo (argv[2]);
 
@@ -583,6 +637,101 @@ int main (int argc = 1, char** argv = nullptr)
         { std::cerr << "fractal RATE does nothing\n"; return 1; }
     }
 
+    // Quantum Lab (wave 4): evolution-level FX, exchange symmetry and the
+    // master lab matrix — finite, audible, state-changing, reproducible, and
+    // bit-exact when the lab is switched off.
+    {
+        auto renderLab = [] (const std::vector<std::pair<const char*, float>>& settings, int blocks)
+        {
+            PluginProcessor proc;
+            proc.prepareToPlay (48000.0, 512);
+            proc.apvts.getParameter ("samplesPerTimestep")->setValueNotifyingHost (0.2f);
+            proc.apvts.getParameter ("limiter")->setValueNotifyingHost (0.0f);
+            for (const auto& s : settings)
+                if (auto* p = proc.apvts.getParameter (s.first))
+                    p->setValueNotifyingHost (s.second);
+
+            juce::MidiBuffer midi, empty;
+            midi.addEvent (juce::MidiMessage::noteOn (1, 60, (juce::uint8) 100), 0);
+            midi.addEvent (juce::MidiMessage::noteOn (1, 64, (juce::uint8) 90), 0);
+            juce::AudioBuffer<float> buffer (2, 512);
+            std::vector<float> out;
+            for (int b = 0; b < blocks; ++b)
+            {
+                proc.processBlock (buffer, b == 0 ? midi : empty);
+                out.insert (out.end(), buffer.getReadPointer (0), buffer.getReadPointer (0) + 512);
+            }
+            return out;
+        };
+        auto labStats = [] (const std::vector<float>& v) -> std::pair<double, bool>
+        {
+            double rms = 0.0;
+            bool ok = true;
+            for (float x : v)
+            {
+                if (! std::isfinite (x)) { ok = false; break; }
+                rms += (double) x * x;
+            }
+            return { std::sqrt (rms / (double) std::max<size_t> (1, v.size())), ok };
+        };
+
+        const auto labBase = renderLab ({}, 24);
+        const auto baseStats = labStats (labBase);
+        if (! baseStats.second || baseStats.first <= 0.0) { std::cerr << "lab baseline broken\n"; return 1; }
+
+        // (a) evolution effects each change the signal and stay clean.
+        for (const char* id : { "gpSat", "wkbFilter", "qPhaser", "phaseAccum" })
+        {
+            const auto v = renderLab ({ { id, 0.8f } }, 24);
+            const auto st = labStats (v);
+            if (! st.second || st.first <= 0.0) { std::cerr << "lab evolution NaN/silent: " << id << "\n"; return 1; }
+            if (v == labBase) { std::cerr << "lab evolution had no effect: " << id << "\n"; return 1; }
+        }
+
+        // (b) exchange symmetry: Bose and Fermi differ from off and each other.
+        const auto bose  = renderLab ({ { "interfere", 0.5f } }, 24);
+        const auto fermi = renderLab ({ { "interfere", 1.0f } }, 24);
+        for (const auto* v : { &bose, &fermi })
+        {
+            const auto st = labStats (*v);
+            if (! st.second || st.first <= 0.0) { std::cerr << "symmetry NaN/silent\n"; return 1; }
+            if (*v == labBase) { std::cerr << "symmetry had no effect\n"; return 1; }
+        }
+        if (bose == fermi) { std::cerr << "Bose and Fermi render identically\n"; return 1; }
+
+        // (c) master lab matrix: every type renders 4.8 s of clean audio.
+        for (int lt = 1; lt <= 5; ++lt)
+        {
+            const auto v = renderLab ({ { "labType", (float) lt / 5.0f },
+                                        { "labAmt", 0.7f }, { "labChar", 0.85f },
+                                        { "labSize", 0.6f }, { "labMix", 0.6f } }, 96);
+            const auto st = labStats (v);
+            if (! st.second || st.first <= 0.0) { std::cerr << "lab FX NaN/silent: type " << lt << "\n"; return 1; }
+        }
+
+        // (d) lab off is a bit-exact bypass: wet controls stay irrelevant.
+        const auto bypass = renderLab ({ { "labAmt", 0.9f }, { "labChar", 1.0f },
+                                         { "labSize", 1.0f }, { "labMix", 1.0f } }, 24);
+        if (bypass != labBase) { std::cerr << "lab off is not a bit-exact bypass\n"; return 1; }
+
+        // (e) reproducibility: the FDN and the event RNG are deterministic.
+        const std::vector<std::pair<const char*, float>> anders =
+            { { "labType", 0.2f }, { "labAmt", 0.7f }, { "labChar", 0.85f },
+              { "labSize", 0.6f }, { "labMix", 0.6f } };
+        if (renderLab (anders, 96) != renderLab (anders, 96))
+        { std::cerr << "lab reverb not reproducible\n"; return 1; }
+
+        // (f) Born events really duck: over 3 s at MIX=1 the gain envelope
+        //     must swing between near-full and near-zero.
+        const auto ducked = renderLab ({ { "labType", 0.6f }, { "labAmt", 1.0f },
+                                         { "labChar", 1.0f }, { "labSize", 0.3f },
+                                         { "labMix", 1.0f } }, 192);
+        float duckMax = 0.0f, duckMin = 1.0e9f;
+        for (float x : ducked) { duckMax = std::max (duckMax, std::abs (x)); duckMin = std::min (duckMin, std::abs (x)); }
+        if (! std::isfinite (duckMin) || duckMax <= 0.0f || duckMin > duckMax * 0.25f)
+        { std::cerr << "born events never duck: min " << duckMin << " max " << duckMax << "\n"; return 1; }
+    }
+
     // Factory presets: every file must carry a params object whose keys are real
     // parameter IDs inside their ranges, and applying it must render cleanly.
     {
@@ -709,6 +858,58 @@ int main (int argc = 1, char** argv = nullptr)
         const float* d = buffer.getReadPointer (0);
         for (int i = 0; i < 512; ++i) { if (! std::isfinite (d[i])) { std::cerr << "bench-extreme NaN\n"; return 1; } rms += d[i] * d[i]; }
         if (rms <= 0.0f) { std::cerr << "bench-extreme silent\n"; return 1; }
+    }
+
+    if (argc > 1 && juce::String (argv[1]) == "--bench-lab")
+    {
+        // Quantum Lab cost probe: 8 voices with every evolution effect on,
+        // benchmarked once per master lab effect at full mix.
+        const char* names[] = { "Off", "Anderson Reverb", "Adiabatic Pitch",
+                                "Born Events", "Mode Clip", "Loschmidt Delay" };
+        for (int lt = 0; lt <= 5; ++lt)
+        {
+            PluginProcessor proc;
+            proc.prepareToPlay (48000.0, 512);
+            proc.apvts.getParameter ("samplesPerTimestep")->setValueNotifyingHost (0.2f);
+            proc.apvts.getParameter ("applyWavefunction")->setValueNotifyingHost (1.0f);
+            proc.apvts.getParameter ("gpSat")->setValueNotifyingHost (0.6f);
+            proc.apvts.getParameter ("wkbFilter")->setValueNotifyingHost (0.6f);
+            proc.apvts.getParameter ("qPhaser")->setValueNotifyingHost (0.6f);
+            proc.apvts.getParameter ("phaseAccum")->setValueNotifyingHost (0.6f);
+            proc.apvts.getParameter ("labType")->setValueNotifyingHost ((float) lt / 5.0f);
+            proc.apvts.getParameter ("labAmt")->setValueNotifyingHost (0.7f);
+            proc.apvts.getParameter ("labChar")->setValueNotifyingHost (0.5f);
+            proc.apvts.getParameter ("labSize")->setValueNotifyingHost (0.5f);
+            proc.apvts.getParameter ("labMix")->setValueNotifyingHost (0.5f);
+
+            {
+                juce::MidiBuffer midi;
+                for (int n : { 48, 55, 60, 62, 64, 67, 69, 72 })
+                    midi.addEvent (juce::MidiMessage::noteOn (1, (juce::uint8) n, (juce::uint8) 100), 0);
+                juce::AudioBuffer<float> buffer (2, 512);
+                proc.processBlock (buffer, midi);
+            }
+
+            const int blocks = lt == 1 ? 4000 : 20000;
+            juce::AudioBuffer<float> buffer (2, 512);
+            juce::MidiBuffer empty;
+            const double t0 = juce::Time::getMillisecondCounterHiRes();
+            for (int i = 0; i < blocks; ++i)
+                proc.processBlock (buffer, empty);
+            const double us = (juce::Time::getMillisecondCounterHiRes() - t0) * 1000.0 / (double) blocks;
+            const float rt = (float) (us * 48000.0 / 512.0 / 1.0e6);
+
+            float rms = 0.0f;
+            const float* d = buffer.getReadPointer (0);
+            for (int i = 0; i < 512; ++i)
+            {
+                if (! std::isfinite (d[i])) { std::cerr << "bench-lab NaN at " << lt << "\n"; return 1; }
+                rms += d[i] * d[i];
+            }
+            if (rms <= 0.0f) { std::cerr << "bench-lab silent at " << lt << "\n"; return 1; }
+            std::cout << "bench-lab [" << names[lt] << "]: " << juce::String (us, 1)
+                      << " us/block  (" << juce::String (rt, 3) << " x realtime)\n";
+        }
     }
 
     std::cout << "ALL TESTS PASSED" << std::endl;

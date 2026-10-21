@@ -32,6 +32,15 @@ public:
     bool jumpedRecently() { return osc.consumeJumped(); }
     void forceCollapse() { osc.collapseNow(); }
 
+    // Quantum Lab (wave 4): evolution-level effects, forwarded to the osc.
+    void setEvolutionFx (float gp, float wkb, float disp, float phaseAcc);
+
+    // Cross-voice interference (Bose/Fermi exchange) hooks for the engine.
+    float envLevel() const { return envelope * velocityGain; }
+    float oscPhase() const { return osc.getPhase(); }
+    /** Read this voice's wavetable at an arbitrary scan position. */
+    float readTableAt (float phase) const { return osc.readAt (phase); }
+
     void fillScope (float* dest, int maxN) const;
     void fillScopeMomentum (float* dest, int maxN) const;
     void fillPotential (float* dest, int maxN) const;
@@ -109,6 +118,9 @@ private:
     };
     LastInputs last {};
     bool lastKnown = false;
+
+    // Evolution FX of the last setEvolutionFx call (skip redundant forwarding).
+    float lastGp = -1.0f, lastWkb = -1.0f, lastDisp = -1.0f, lastPhaseAcc = -1.0f;
 
     void updateEnvelope();
     float frequencyToPhaseInc (float freq) const;

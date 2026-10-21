@@ -6,8 +6,9 @@
 //   left column      520 : (190 + 118 + 2 gaps) with adsr : harmony = 190 : 118 = 1.610
 //   right column     hero 208 vs utility 128  = 1.625 (hero = phi x utility)
 //   adsr zone        curve 465 : knobs 289 = 1.609
-// Every sum below closes exactly to the 1280 x 920 frame with 12 px margins
-// and 14 px gutters.
+// Wave 4 appends a full-width Quantum Lab band (1256 x 208, the hero-panel
+// height) below both columns; every sum closes exactly to the 1280 x 1142
+// frame with 12 px margins and 14 px gutters.
 const juce::Rectangle<int> PluginEditor::headerArea { 12, 8, 1256, 36 };
 const juce::Rectangle<int> PluginEditor::canvasArea { 12, 52, 768, 520 };
 const juce::Rectangle<int> PluginEditor::adsrArea   { 12, 586, 768, 190 };
@@ -17,6 +18,8 @@ const juce::Rectangle<int> PluginEditor::potArea    { 794, 274, 474, 208 };
 const juce::Rectangle<int> PluginEditor::quantArea  { 794, 496, 474, 128 };
 const juce::Rectangle<int> PluginEditor::filterArea { 794, 638, 474, 128 };
 const juce::Rectangle<int> PluginEditor::fxArea     { 794, 780, 474, 128 };
+// Wave 4: full-width Quantum Lab band, height matched to the hero panels.
+const juce::Rectangle<int> PluginEditor::labArea    { 12, 922, 1256, 208 };
 
 namespace
 {
@@ -40,7 +43,8 @@ juce::Colour PluginEditor::accentFor (Group g)
         case Group::Filter:    return pal.filter;
         case Group::Fx:        return pal.fx;
         case Group::Harmony:   return pal.harmony;
-    }
+        case Group::Lab:       return pal.accent;
+        }
     return pal.accent;
 }
 
@@ -76,7 +80,7 @@ PluginEditor::PluginEditor (PluginProcessor& p)
     setLookAndFeel (&lnf);
     setResizable (true, true);
     setSize (baseW, baseH);
-    setResizeLimits (1024, 740, 1700, 1100);
+    setResizeLimits (1024, 740, 1700, 1300);
 
     title.setText ("SPIRALQUANT", juce::dontSendNotification);
     addAndMakeVisible (title);
@@ -132,13 +136,24 @@ PluginEditor::PluginEditor (PluginProcessor& p)
     fxType.addItemList ({ "Off","Flanger","Phaser","Bitcrush","Fractal" }, 1);
     fxSolo.addItemList ({ "Full","Dry","Wet" }, 1);
     chordType.addItemList ({ "Power","Major","Minor","Sus4","Major7","Tritone","Cluster","Pythagorean" }, 1);
-    for (auto* c : { &sampleMode, &fxType, &fxSolo, &chordType })
+    labType.addItemList ({ "Off","Anderson Reverb","Adiabatic Pitch","Born Events","Mode Clip","Loschmidt Delay" }, 1);
+    labSym.addItemList ({ "Off","Bose","Fermi" }, 1);
+    for (auto* c : { &sampleMode, &fxType, &fxSolo, &chordType, &labType, &labSym })
         addAndMakeVisible (*c);
     sampleMode.setTooltip ("Which part of the complex wave becomes audio.");
     fxType.setTooltip ("Master effect applied after the voice mix.");
     fxSolo.setTooltip ("Full = dry+wet, Dry = effect off, Wet = effect only.");
     chordType.setTooltip ("Chord voicing. Consonant chords use small-integer (just) ratios, "
                           "dissonant ones use large coprime ratios.");
+    labType.setTooltip ("Quantum Lab master effect, rendered from the research report:\n"
+                        "Anderson Reverb = 16-line unitary FDN with tunable length disorder;\n"
+                        "Adiabatic Pitch = grain shifter gliding like an adiabatic level transition;\n"
+                        "Born Events = Poisson gates whose rate follows the signal power (|psi|^2);\n"
+                        "Mode Clip = STFT spectral saturation, a projection onto the lowest modes;\n"
+                        "Loschmidt Delay = time-reversed echo window with a fidelity envelope.");
+    labSym.setTooltip ("Exchange symmetry between neighbouring voices: Bose (+) reads the\n"
+                       "partner's wavetable constructively, Fermi (-) destructively\n"
+                       "(symmetrised pair states need two or more voices).");
 
     struct GroupSpecs
     {
@@ -188,6 +203,18 @@ PluginEditor::PluginEditor (PluginProcessor& p)
         { Group::Harmony, {
             { "pitchShift", "PITCH",  "Global transposition in semitones (-48 to +48 st), applied as 2^(st/12).", semitoneText },
             { "walkRate",   "RATE",   "Quantum-walk measurement ticks per second.", rateText } } },
+        // Quantum Lab (wave 4): evolution-level effects on the left, the
+        // master lab effect's four shared controls on the right.
+        { Group::Lab, {
+            { "gpSat",      "GP SAT", "Gross-Pitaevskii self-interaction g|psi|^2 psi: spectral peaks self-repel, a nonlinear quantum saturation ceiling.", percent },
+            { "wkbFilter",  "WKB",    "WKB tunneling filter: momentum modes transmit a virtual barrier with T = exp(-2 kappa L); fast components pass, slow ones reflect.", percent },
+            { "qPhaser",    "PHASER", "Dispersive quantum phaser: the readout probes the wave after an extra e^(-i alpha k^2) propagation, sweeping quadratic-phase notches.", percent },
+            { "phaseAccum", "PHASE",  "Global dynamical phase e^(-iEt/hbar): the wave slowly orbits between Real and Imag readouts; Berry phase adds winding on potential sweeps.", percent } } },
+        { Group::Lab, {
+            { "labAmt",     "AMT",    "Lab effect intensity (reverb send / shift scale / duck depth / spectral ceiling / echo level).", percent },
+            { "labChar",    "CHAR",   "Lab character, -100%..+100% (disorder W / semitones -12..+12 / event rate / modes kept / fidelity decay).", signedPercent },
+            { "labSize",    "SIZE",   "Lab size (T60 / glide time / recovery time / window length).", percent },
+            { "labMix",     "MIX",    "Dry/wet balance of the Quantum Lab effect.", percent } } },
     };
 
     for (const auto& g : groups)
@@ -206,6 +233,8 @@ PluginEditor::PluginEditor (PluginProcessor& p)
     fxTypeAtt     = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (processor.apvts, "fxType", fxType);
     fxSoloAtt     = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (processor.apvts, "fxSolo", fxSolo);
     chordTypeAtt  = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (processor.apvts, "chordType", chordType);
+    labTypeAtt    = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (processor.apvts, "labType", labType);
+    labSymAtt     = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (processor.apvts, "interfere", labSym);
     uiSkinAtt     = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (processor.apvts, "uiSkin", skinCombo);
 
     // Message-thread parameter pointers, resolved once (no per-tick scans).
@@ -250,6 +279,8 @@ void PluginEditor::addKnob (const char* id, const juce::String& titleText, const
     addAndMakeVisible (*k.slider);
     if (group == Group::Fx)
         fxKnobs.push_back (k.slider.get());
+    if (group == Group::Lab && juce::String (id).startsWith ("lab"))
+        labKnobs.push_back (k.slider.get());
     if (juce::String (id) == "pitchShift")
         pitchKnob = k.slider.get();
     knobs.push_back (std::move (k));
@@ -409,6 +440,27 @@ void PluginEditor::resized()
         }
     }
 
+    // Quantum Lab band: the effect selector and the exchange-symmetry combo
+    // live in the title row; eight knobs share one row — the four evolution
+    // effects (per-voice) on the left, the master lab's AMT/CHAR/SIZE/MIX on
+    // the right.
+    {
+        auto inner = scaled (labArea).reduced (juce::jmax (2, (int) (5 * uiScale)));
+        auto titleRow = inner.removeFromTop (juce::jmax (6, (int) (17 * uiScale)));
+        labType.setBounds (titleRow.removeFromRight ((int) (150 * uiScale)).reduced (1));
+        labSym.setBounds (titleRow.removeFromRight ((int) (96 * uiScale)).reduced (1));
+        const int cellW = inner.getWidth() / 8;
+        int i = 0;
+        for (const char* id : { "gpSat", "wkbFilter", "qPhaser", "phaseAccum",
+                                "labAmt", "labChar", "labSize", "labMix" })
+        {
+            for (const auto& k : knobs)
+                if (k.id == id)
+                    layoutKnob (k, inner.withX (inner.getX() + i * cellW).withWidth (cellW), 110);
+            ++i;
+        }
+    }
+
     setGroupAlpha();
 }
 
@@ -418,6 +470,10 @@ void PluginEditor::setGroupAlpha()
     for (auto* s : fxKnobs)
         s->setAlpha (fxOff ? 0.45f : 1.0f);
     fxSolo.setAlpha (fxOff ? 0.45f : 1.0f);
+
+    const bool labOff = labType.getSelectedId() <= 1;
+    for (auto* s : labKnobs)
+        s->setAlpha (labOff ? 0.45f : 1.0f);
 }
 
 void PluginEditor::applySkin()
@@ -522,6 +578,7 @@ void PluginEditor::paint (juce::Graphics& g)
     drawSkinnedPanel (g, scaled (filterArea).toFloat(),  pal, "Filter & Drive",     accentFor (Group::Filter),    fs);
     drawSkinnedPanel (g, scaled (fxArea).toFloat(),      pal, "Master FX",          accentFor (Group::Fx),        fs);
     drawSkinnedPanel (g, scaled (harmonyArea).toFloat(), pal, "Harmony",            accentFor (Group::Harmony),   fs);
+    drawSkinnedPanel (g, scaled (labArea).toFloat(),     pal, "Quantum Lab",        accentFor (Group::Lab),       fs);
 
     const auto line = scaled ({ 12, 44, 1256, 1 }).toFloat();
     g.setColour (pal.accent.withAlpha (0.35f));

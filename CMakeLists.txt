@@ -4,7 +4,7 @@ if (APPLE AND NOT CMAKE_OSX_ARCHITECTURES)
     set (CMAKE_OSX_ARCHITECTURES "arm64;x86_64" CACHE STRING "macOS architectures to build" FORCE)
 endif()
 
-project(SpiralQuant VERSION 0.1.2 LANGUAGES C CXX)
+project(SpiralQuant VERSION 0.2.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -75,6 +75,7 @@ target_sources(SpiralQuant PRIVATE
     Source/dsp/QuantumVoice.cpp
     Source/dsp/QuantumEngine.cpp
     Source/dsp/MasterFx.cpp
+    Source/dsp/QuantumLab.cpp
 )
 
 target_link_libraries(SpiralQuant PRIVATE
@@ -117,6 +118,7 @@ target_sources(SpiralQuantTests PRIVATE
     Source/dsp/QuantumVoice.cpp
     Source/dsp/QuantumEngine.cpp
     Source/dsp/MasterFx.cpp
+    Source/dsp/QuantumLab.cpp
 )
 target_include_directories(SpiralQuantTests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/Source)
 target_link_libraries(SpiralQuantTests PRIVATE

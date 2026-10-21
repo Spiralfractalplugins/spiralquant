@@ -14,7 +14,8 @@ The project has no commits yet; treat the working tree as the source of truth.
 - `Source/PluginProcessor.{h,cpp}` — APVTS parameter layout and processing entry.
 - `Source/PluginEditor.{h,cpp}` — UI layout and parameter attachments.
 - `Source/dsp/` — engine (`QuantumEngine`), voice (`QuantumVoice`), oscillator
-  (`QuantumOsc`).
+  (`QuantumOsc`), master FX (`MasterFx`), quantum lab (`QuantumLab`: Anderson
+  FDN reverb, adiabatic pitch, Born-rule events, mode clip, Loschmidt delay).
 - `Source/gui/` — palette/skins (`Palette.h`), look-and-feel, scope canvas,
   ADSR editor, preset browser.
 - `tests/TestRender.cpp` — golden render/state test.
