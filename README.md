@@ -70,6 +70,13 @@ to compile from source.
   (fractional-Fourier in between).
 - **Master FX**: Flanger / Phaser / Bitcrush / a tonic-locked Fractal feedback
   comb, plus an output limiter.
+- **Quantum Lab** (wave 4, full-width band): per-voice evolution effects —
+  Gross-Pitaevskii self-interaction, a WKB tunneling filter, a dispersive
+  quantum phaser and global dynamical + Berry phase — plus Bose/Fermi exchange
+  symmetry between voices, and a master lab effect: Anderson-localisation
+  reverb (unitary Hadamard FDN), adiabatic pitch shifting, Born-rule event
+  gates, STFT mode-projection clipping and a Loschmidt (time-reversed) echo
+  delay.
 - **Chord mode** with just-intonation voicings, ±48 st pitch shift, ADSR,
   resonant low-pass, drive/saturation.
 - **Four UI skins** (Dark / SciFi Neon / Console / Golden) and a live HUD scope showing
@@ -223,6 +230,16 @@ It must print `ALL TESTS PASSED`.
 | `zeno`               | float    | 0.0 – 1.0 (Zeno measurement rate)             | 0.0     |
 | `entangle`           | bool     | — (EPR: jumps collapse same-note partners)    | false   |
 | `squeeze`            | float    | -1.0 – +1.0 (− momentum, + position squeeze)  | 0.0     |
+| `gpSat`              | float    | 0.0 – 1.0 (Gross-Pitaevskii g\|psi\|^2 strength) | 0.0  |
+| `wkbFilter`          | float    | 0.0 – 1.0 (WKB virtual-barrier depth)         | 0.0     |
+| `qPhaser`            | float    | 0.0 – 1.0 (dispersive readout, e^(-i alpha k^2)) | 0.0  |
+| `phaseAccum`         | float    | 0.0 – 1.0 (dynamical + Berry phase rate)      | 0.0     |
+| `interfere`          | choice   | Off / Bose / Fermi (exchange symmetry)        | 0 (Off) |
+| `labType`            | choice   | Off / Anderson Reverb / Adiabatic Pitch / Born Events / Mode Clip / Loschmidt Delay | 0 (Off) |
+| `labAmt`             | float    | 0.0 – 1.0 (lab intensity)                     | 0.5     |
+| `labChar`            | float    | -1.0 – +1.0 (lab character, remapped per effect) | 0.0  |
+| `labSize`            | float    | 0.0 – 1.0 (T60 / glide / recovery / window)   | 0.5     |
+| `labMix`             | float    | 0.0 – 1.0 (lab dry/wet)                       | 0.5     |
 
 Parameters are stored in an `AudioProcessorValueTreeState`, so host automation and
 state save/restore are supported.
@@ -429,6 +446,8 @@ Source/
     QuantumVoice.{h,cpp}  envelope, filter, saturation
     QuantumOsc.{h,cpp}    Schrödinger wavetable
     MasterFx.{h,cpp}      master effects
+    QuantumLab.{h,cpp}    quantum lab: Anderson FDN, adiabatic pitch, Born
+                          events, mode clip, Loschmidt delay
   gui/                   palette/skins, scope canvas, ADSR editor, look-and-feel
 tests/TestRender.cpp
 vendor/JUCE/            JUCE 8.0.14 (cloned in, not committed)

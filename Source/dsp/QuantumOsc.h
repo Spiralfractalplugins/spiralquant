@@ -45,6 +45,20 @@ public:
     void setZeno (float rate) { zenoAmt = juce::jlimit (0.0f, 1.0f, rate); }
     /** Squeeze of the prepared state: >0 narrows position, <0 narrows momentum. */
     void setSqueeze (float amount) { squeezeAmt = juce::jlimit (-1.0f, 1.0f, amount); }
+    /** Gross-Pitaevskii self-interaction: the wave feels an extra potential
+        g|psi|^2 (defocusing saturation of peaks). 0 = linear evolution. */
+    void setGpSaturation (float amount) { gpAmt = juce::jlimit (0.0f, 1.0f, amount); }
+    /** WKB tunneling filter: momentum modes transmit through a virtual barrier
+        with T(k) = exp(-2 kappa(k) L); slow components reflect. 0 = off. */
+    void setWkbFilter (float amount) { wkbAmt = juce::jlimit (0.0f, 1.0f, amount); }
+    /** Dispersive readout: the wavetable is probed after an extra free
+        propagation e^{-i alpha k^2}, sweeping quadratic-phase notches
+        (quantum phaser). 0 = read the bare wave. */
+    void setQPhaser (float amount) { dispAmt = juce::jlimit (0.0f, 1.0f, amount); }
+    /** Global dynamical phase e^{-iEt/hbar}: the readout slowly orbits between
+        psi and i*psi (per-voice frequency-shift flavour). Berry phase from
+        adiabatic potential sweeps is folded into the same rotation. */
+    void setPhaseAccum (float amount) { phaseAccAmt = juce::jlimit (0.0f, 1.0f, amount); }
     /** True once after a phonon jump until read (engine uses it for EPR pairing). */
     bool consumeJumped() { const bool j = jumped; jumped = false; return j; }
     /** EPR partner response: apply the annihilation collapse without rolling. */
@@ -59,6 +73,10 @@ public:
 
     float getPhase() const { return phase; }
     void setPhase (float p) { phase = p; }
+    /** Raw table read for cross-voice interference (Bose/Fermi exchange):
+        returns the same readout mode the voice itself uses. (Defined in the
+        .cpp: it goes through the private inline table samplers.) */
+    float readAt (float index) const;
 
     /** Copy latest |psi| outline for the scope (thread-unsafe; caller guards). */
     void fillScope (float* dest, int maxN) const;
@@ -74,6 +92,9 @@ private:
     int memoryPushInterval() const;
     void zenoMeasure();
     void applySqueeze();
+    void rebuildWkbTable();
+    void rebuildDispTable();
+    void advanceRotation();
     float buildJumpBuf();
     void applyJumpBuf();
     inline std::complex<float> sampleWave (float index) const;
@@ -103,6 +124,11 @@ private:
     float ringdown = 0.0f;
     float zenoAmt = 0.0f;
     float squeezeAmt = 0.0f;
+    // Quantum Lab (wave 4): evolution-level effects.
+    float gpAmt = 0.0f;          // Gross-Pitaevskii g|psi|^2 strength
+    float wkbAmt = 0.0f;         // WKB virtual-barrier transmission depth
+    float dispAmt = 0.0f;        // dispersive (quantum phaser) readout mix
+    float phaseAccAmt = 0.0f;    // global dynamical + Berry phase rotation
     bool jumped = false;
     float damp = 1.0f;
     float memBuf[2][SIZE] {};
@@ -121,6 +147,23 @@ private:
     bool tablesDirty = true;
     float tableDt = -1.0f;
     bool inFrequencyDomain = false;
+
+    // Quantum Lab tables/state (rebuilt lazily, audio thread only).
+    float wkbT[SIZE] {};                  // WKB transmission per momentum bin
+    float wkbBuiltAmt = -1.0f;            // wkbAmt the table was built for
+    float wkbBuiltVmax = -1.0f;           // and potential height it saw
+    std::complex<float> dispPhase[SIZE];  // exp(-i alpha k^2)
+    float dispBuiltAmt = -1.0f;           // dispAmt the table was built for
+    std::complex<float> dispPsi[SIZE];    // dispersion-rotated readout table
+    std::complex<float> dispTmp[SIZE];
+    bool dispValid = false;
+    // Global phase rotation: (rotC + i rotS) advances by (rotDC + i rotDS)
+    // per sample; recomputed after every evolution step from <H>.
+    float rotC = 1.0f, rotS = 0.0f;
+    float rotDC = 1.0f, rotDS = 0.0f;
+    float meanEnergy = 10.0f;             // <H> estimate in simulation units
+    float berryPhase = 0.0f;              // geometric phase from adiabatic sweeps
+    float lastBerryShift = 0.0f;
 
     float phase = 0.0f;
     float timestepCounter = 0.0f;

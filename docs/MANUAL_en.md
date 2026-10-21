@@ -63,6 +63,9 @@ Run `SpiralQuant.app` (or the Windows/Linux executable) directly — no host nee
 |                              |    DEPTH RATE FDBK MIX BITS   |
 |                              |    CHAOS                      |
 +------------------------------+-------------------------------+
+| QUANTUM LAB (full width): GP SAT WKB PHASER PHASE AMT CHAR SIZE MIX |
+| lab type + exchange-symmetry selectors in the title band             |
++---------------------------------------------------------------------+
 ```
 
 ### Interacting with controls
@@ -148,6 +151,53 @@ normalised by feedback, so the effect never gets louder than the dry mix.
   under full scale: runaway chord/drive spikes are pulled down with a fast attack
   and slow release, and the output can never leave ±1. Off = unprotected signal.
 
+### QUANTUM LAB band
+
+Ten effects from the quantum-effects research report, in one full-width strip.
+The four left knobs act **per voice** on the Schrödinger evolution; the four
+right knobs (AMT / CHAR / SIZE / MIX) drive the **master lab effect** selected
+in the title band (the row dims when the lab is off). The second selector
+chooses the **exchange symmetry** between neighbouring voices.
+
+| Knob | Meaning |
+|---|---|
+| GP SAT | Gross-Pitaevskii self-interaction g\|psi\|^2*psi: spectral peaks self-repel, a nonlinear quantum saturation ceiling (0 = linear evolution) |
+| WKB | Tunneling filter: each momentum mode transmits a virtual barrier with T = exp(-2*kappa*L); fast components pass, slow ones reflect — a high-pass with the WKB skirt |
+| PHASER | Dispersive quantum phaser: the readout probes the wave after an extra e^(-i*alpha*k^2) propagation; quadratic-phase notches sweep with the knob |
+| PHASE | Global dynamical phase e^(-i*E*t/hbar): the wavetable slowly orbits between the Real and Imag readouts (<H> is measured from the state); sweeping POT CENTER additionally winds a Berry phase |
+| AMT | Lab intensity (reverb send / shift scale / duck depth / spectral ceiling / echo level) |
+| CHAR | Lab character, -100..+100%: disorder W / semitones (-12..+12) / event rate / modes kept / fidelity decay |
+| SIZE | Lab size: T60 (0.3-8 s) / glide time / recovery time / echo window (60-1000 ms) |
+| MIX | Lab dry/wet |
+
+**Exchange symmetry**: BOSE (+) adds each voice's ring partner, read at the
+voice's own scan phase, constructively; FERMI (-) subtracts it. Two or more
+voices needed — try it with CHORD on.
+
+**Anderson Reverb** is a 16-line feedback delay network whose loop mixing is an
+orthogonal Hadamard matrix (a closed, unitary system). CHAR sets how much the
+16 lengths are disordered: W = 0 keeps harmonic spacing (metallic), large W
+localises the modes into a dense diffuse tail. SIZE is the T60, MIX the blend.
+
+**Adiabatic Pitch** shifts with two Hann-complementary delay taps. The ratio
+itself glides with a long time constant (SIZE) — the adiabatic theorem: slow
+parameter changes move the level E ~ 1/L^2 without pops. CHAR is the shift
+(-12..+12 st), AMT scales it toward zero.
+
+**Born Events** runs a Poisson gate engine whose local rate follows the
+smoothed signal power (louder = larger |psi|^2 = more measurements). Each event
+ducks the wet path by AMT and recovers over SIZE. CHAR is the mean rate.
+
+**Mode Clip** is a 256-point STFT spectral saturation: magnitudes above the
+AMT ceiling are clipped and modes beyond CHAR (2..64) are zeroed — a
+projection of the overloaded signal onto its lowest energy modes. Warm,
+quantised drive with a fixed ~5 ms latency.
+
+**Loschmidt Delay** plays the last SIZE window backwards — the audio analogue
+of evolving with the reversed Hamiltonian U(-t) = U+(t) — faded at the window
+edges and weighted by a Loschmidt-fidelity envelope exp(-G*t) (CHAR sets G,
+AMT the echo level). Rhythmic reversed echoes at the window period.
+
 ### HARMONY strip
 
 - **CHORD**: one key triggers a just-intonation voicing. Consonant sets
@@ -177,7 +227,7 @@ normalised by feedback, so the effect never gets louder than the dry mix.
 
 ## 5. Presets
 
-- The header combo lists 18 factory presets (embedded at build time) and your own.
+- The header combo lists 24 factory presets (embedded at build time) and your own.
   Picking one from the list recalls it straight away.
 - **LOAD** re-applies the selected preset; **SAVE** writes a `.sp303preset` JSON to
   the app-support folder; **DEL** removes a user preset.

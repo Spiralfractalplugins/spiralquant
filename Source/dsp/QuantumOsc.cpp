@@ -29,6 +29,24 @@ void QuantumOsc::setPotential (int pt, float ps, float psc, float ph)
 {
     if (pt == potentialType && ps == potentialShift && psc == potentialScale && ph == potentialHeight)
         return;
+    // Berry phase: an adiabatic displacement of the potential centre winds the
+    // geometric phase gamma ~ <k> dx; a later sweep back does not unwind it
+    // (only the dynamical part is single-valued). The momentum kick of the
+    // prepared wave scales the winding, as in the report's eq. for gamma.
+    if (phaseAccAmt > 0.0f && ps != lastBerryShift && waveImpulse > 0.0f)
+    {
+        const float dGamma = (ps - lastBerryShift) * waveImpulse * 4.0f
+                             * juce::MathConstants<float>::twoPi;
+        berryPhase += dGamma;
+        const float b = berryPhase;
+        const float cb = std::cos (b), sb = std::sin (b);
+        const float nrc = rotC * cb - rotS * sb;
+        rotS = rotC * sb + rotS * cb;
+        rotC = nrc;
+    }
+    if (ps != lastBerryShift)
+        lastBerryShift = ps;
+
     potentialType = pt; potentialShift = ps; potentialScale = psc; potentialHeight = ph;
     computePotential();
     tablesDirty = true;
@@ -63,8 +81,50 @@ void QuantumOsc::rebuildTables()
         kinPhase[i] = std::polar (1.0f, PRE * (float) (k * k)) * invSqrtN;
     }
 
+    rebuildWkbTable();
+
     tableDt = dt;
     tablesDirty = false;
+}
+
+void QuantumOsc::rebuildWkbTable()
+{
+    // WKB transmission of a virtual rectangular barrier of height Veff:
+    //   T(k) = exp(-2 kappa L),  kappa = sqrt(2 (Veff - E_k)),  E_k = ktilde^2 / 2.
+    // Fast (high-energy) components pass, slow ones reflect — a high-pass with
+    // the characteristic exponential WKB skirt. The knob sweeps Veff, so the
+    // cutoff glides from bin ~12 (soft) to ~43 (hard) across the range.
+    wkbBuiltAmt = wkbAmt;
+    wkbBuiltVmax = 0.0f;
+    for (int i = 0; i < SIZE; ++i)
+        wkbBuiltVmax = juce::jmax (wkbBuiltVmax, potential[i]);
+
+    const float veff = 0.05f + 2.2f * wkbAmt * wkbAmt;
+    const float kFac = juce::MathConstants<float>::twoPi / SIZE_F;
+    for (int i = 0; i < SIZE; ++i)
+    {
+        const int k = std::abs ((i <= SIZE / 2) ? i : i - SIZE);
+        const float kt = kFac * (float) k;
+        const float ek = 0.5f * kt * kt;
+        const float kappa2 = 2.0f * (veff - ek);
+        wkbT[i] = kappa2 > 0.0f ? std::exp (-2.0f * std::sqrt (kappa2)) : 1.0f;
+    }
+}
+
+void QuantumOsc::rebuildDispTable()
+{
+    // Quantum phaser: an extra free propagation by alpha before the readout.
+    // e^{-i alpha k^2} is unit-modulus, so the spectral balance is untouched;
+    // the quadratic phase sweeps notches whose spacing widens with k — the
+    // dispersive analogue of a phaser bank.
+    dispBuiltAmt = dispAmt;
+    const float alpha = 0.004f * dispAmt * dispAmt;
+    const float kFac = juce::MathConstants<float>::twoPi / SIZE_F;
+    for (int i = 0; i < SIZE; ++i)
+    {
+        const int k = (i <= SIZE / 2) ? i : i - SIZE;
+        dispPhase[i] = std::polar (1.0f, -alpha * (float) (k * k) * kFac * kFac);
+    }
 }
 
 void QuantumOsc::trigger ()
@@ -84,9 +144,32 @@ void QuantumOsc::trigger ()
     memHead = 0;
     memCountdown = memoryPushInterval();
     damp = 1.0f;
+    // Quantum Lab state resets with the prepared state.
+    rotC = 1.0f; rotS = 0.0f;
+    rotDC = 1.0f; rotDS = 0.0f;
+    berryPhase = 0.0f;
+    lastBerryShift = potentialShift;
+    meanEnergy = 10.0f;
+    dispValid = false;
+    if (wkbAmt != wkbBuiltAmt)
+        rebuildWkbTable();
+    if (dispAmt != dispBuiltAmt)
+        rebuildDispTable();
     const int steps = (int) std::max (0.0f, preStartSteps);
     for (int i = 0; i < steps; ++i)
         doTimestep (timestepDelta);
+    if (dispAmt > 0.0f && ! showFFT)
+    {
+        // One dispersion pass so the phaser readout is valid immediately.
+        for (int i = 0; i < SIZE; ++i)
+            dispTmp[i] = psiFFT[i] * dispPhase[i];
+        fft.perform (dispTmp, dispPsi, true);
+        float s = 0.0f;
+        for (int i = 0; i < SIZE; ++i) s += std::norm (dispPsi[i]);
+        s = 1.0f / std::sqrt (std::max (1.0e-12f, s));
+        for (int i = 0; i < SIZE; ++i) dispPsi[i] *= s;
+        dispValid = true;
+    }
     phase = 0.0f;
     timestepCounter = 0.0f;
     timestepCountTo = samplesPerTimestep <= 0.0f ? 1.0f : samplesPerTimestep;
@@ -227,10 +310,39 @@ void QuantumOsc::doTimestep (float dt)
 {
     if (tablesDirty || dt != tableDt)
         rebuildTables();
+    if (wkbAmt != wkbBuiltAmt)
+        rebuildWkbTable();
+    if (dispAmt != dispBuiltAmt)
+        rebuildDispTable();
+
+    const bool gpOn = gpAmt > 0.0f;
+    const bool accOn = phaseAccAmt > 0.0f;
+    const bool wkbOn = wkbAmt > 0.0f;
+    const float gpGain = 400.0f * gpAmt;
+    float vE = 0.0f, pW = 0.0f;   // <V> numerator / denominator
+    float kE = 0.0f, kW = 0.0f;   // <k^2> numerator / denominator
 
     // potential part in position domain
     for (int i = 0; i < SIZE; ++i)
-        psi[i] *= potPhase[i];
+    {
+        std::complex<float> v = psi[i] * potPhase[i];
+        // Gross-Pitaevskii saturation: a defocusing g|psi|^2 term adds an
+        // amplitude-dependent phase, so spectral peaks self-repel — the
+        // nonlinear ceiling of the report's section 9. Renormalisation below
+        // keeps the focusing branch bounded as well.
+        if (gpOn)
+        {
+            const float n = std::norm (v);
+            v *= std::polar (1.0f, dt * gpGain * n);
+        }
+        psi[i] = v;
+        if (accOn)
+        {
+            const float w = std::norm (v);
+            vE += w * potential[i];
+            pW += w;
+        }
+    }
 
     // Non-Markovian memory: the wave also feels its own density from
     // ~memoryTime ago (delayed Kerr-like self-phase modulation).
@@ -249,8 +361,22 @@ void QuantumOsc::doTimestep (float dt)
     fft.perform (psi, psiFFT, false);
 
     // kinetic part (the 1/sqrt(N) forward scale is folded into the table)
+    // plus the WKB tunneling filter: each momentum mode loses amplitude
+    // according to its transmission through the virtual barrier.
     for (int i = 0; i < SIZE; ++i)
-        psiFFT[i] *= kinPhase[i];
+    {
+        std::complex<float> v = psiFFT[i] * kinPhase[i];
+        if (wkbOn)
+            v *= wkbT[i];
+        psiFFT[i] = v;
+        if (accOn)
+        {
+            const int k = (i <= SIZE / 2) ? i : i - SIZE;
+            const float w = std::norm (v);
+            kE += w * (float) (k * k);
+            kW += w;
+        }
+    }
 
     if (! showFFT)
     {
@@ -279,6 +405,21 @@ void QuantumOsc::doTimestep (float dt)
             if (zd (rng) < zenoAmt)
                 zenoMeasure();
         }
+
+        // Quantum phaser: rotate a copy of the momentum wave by e^{-i alpha k^2}
+        // and bring it back to the position domain. The bare psi stays the
+        // canonical state; only the readout probes the dispersed branch.
+        if (dispAmt > 0.0f)
+        {
+            for (int i = 0; i < SIZE; ++i)
+                dispTmp[i] = psiFFT[i] * dispPhase[i];
+            fft.perform (dispTmp, dispPsi, true);
+            float ds = 0.0f;
+            for (int i = 0; i < SIZE; ++i) ds += std::norm (dispPsi[i]);
+            ds = 1.0f / std::sqrt (std::max (1.0e-12f, ds));
+            for (int i = 0; i < SIZE; ++i) dispPsi[i] *= ds;
+            dispValid = true;
+        }
     }
     else
     {
@@ -288,6 +429,27 @@ void QuantumOsc::doTimestep (float dt)
         for (int i = 0; i < SIZE; ++i) s += std::norm (psi[i]);
         s = 1.0f / std::sqrt (std::max (1.0e-12f, s));
         for (int i = 0; i < SIZE; ++i) psi[i] *= s;
+    }
+
+    // Global dynamical phase: dphi/dt = <H> = <T> + <V> from the expectation
+    // values gathered above (e^{-iEt/hbar}). The per-sample rotation increment
+    // is precomputed here so the readout loop stays trig-free.
+    if (accOn && pW > 0.0f && kW > 0.0f)
+    {
+        const float kFac = juce::MathConstants<float>::twoPi / SIZE_F;
+        const float kinetic = kFac * kFac * (kE / kW);
+        const float potentialE = vE / pW;
+        meanEnergy = juce::jlimit (0.5f, 200.0f, kinetic + potentialE);
+        const float spt = samplesPerTimestep > 0.0f ? samplesPerTimestep : 1.0f;
+        const float dPhi = dt * meanEnergy * (2.0f * phaseAccAmt) / spt;
+        rotDC = std::cos (dPhi);
+        rotDS = -std::sin (dPhi);   // e^{-i phi}: clockwise orbit in Re/Im
+        const float rn2 = rotC * rotC + rotS * rotS;
+        if (std::abs (rn2 - 1.0f) > 1.0e-4f)
+        {
+            const float rn = 1.0f / std::sqrt (std::max (1.0e-12f, rn2));
+            rotC *= rn; rotS *= rn;
+        }
     }
 
     // Publish this step's density into the ring once per delay slice, so the
@@ -478,18 +640,41 @@ float QuantumOsc::getNextSample (float phaseIncrement)
         }
     }
 
-    std::complex<float> v = sampleWave (phase);
+    std::complex<float> v = (dispAmt > 0.0f && dispValid && ! showFFT)
+                              ? sampleArray (dispPsi, phase)
+                              : sampleWave (phase);
     // Approximate fractional-Fourier readout: rotate the sampled quadrature
     // between psi(x) and the momentum state of the last step. Degenerate when
     // showFFT already reads psi(k).
     if (quadrature > 0.0f && ! showFFT)
         v = v * (1.0f - quadrature) + sampleArray (psiFFT, phase) * quadrature;
 
+    // Global dynamical + Berry phase: orbit the sampled phasor between the
+    // real and imaginary readouts (a slow per-voice frequency-shift flavour).
+    if (phaseAccAmt > 0.0f)
+    {
+        const float vr = v.real() * rotC - v.imag() * rotS;
+        v = std::complex<float> (vr, v.real() * rotS + v.imag() * rotC);
+        advanceRotation();
+    }
+
     phase += phaseIncrement;
     if (phase >= (float) SIZE) phase -= (float) SIZE;
     if (phase < 0.0f) phase = 0.0f;
 
     return toReal (v) * damp;
+}
+
+void QuantumOsc::advanceRotation()
+{
+    const float nrc = rotC * rotDC - rotS * rotDS;
+    rotS = rotC * rotDS + rotS * rotDC;
+    rotC = nrc;
+}
+
+float QuantumOsc::readAt (float index) const
+{
+    return toReal (sampleWave (index));
 }
 
 std::complex<float> QuantumOsc::sampleWave (float index) const

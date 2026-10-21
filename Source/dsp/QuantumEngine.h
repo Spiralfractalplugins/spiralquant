@@ -3,6 +3,7 @@
 #include <random>
 #include "QuantumVoice.h"
 #include "MasterFx.h"
+#include "QuantumLab.h"
 
 class QuantumEngine
 {
@@ -22,6 +23,11 @@ public:
                     bool walkOn = false, float walkRateHz = 2.0f, bool limiter = true,
                     float zeno = 0.0f, bool entangle = false, float squeeze = 0.0f);
     void setFxParams (int type, float depth, float rate, float feedback, float mix, float bits, float entropy, int soloMode);
+    /** Quantum Lab (wave 4): evolution-level per-voice effects, the
+        Bose/Fermi exchange symmetry, and the master lab effect. */
+    void setQuantumLab (float gpSat, float wkbFilter, float qPhaser, float phaseAcc,
+                        int symmetry, int labType, float labAmt, float labCtrl,
+                        float labSize, float labMix);
 
     static constexpr int SCOPE_SIZE = QuantumOsc::SIZE;
 
@@ -33,6 +39,8 @@ public:
 private:
     QuantumVoice voices[MAX_VOICES];
     MasterFx fx;
+    QuantumLab lab;
+    int symmetryMode = 0;   // 0 off, 1 Bose (+ exchange), 2 Fermi (- exchange)
     int voiceNote[MAX_VOICES] = { -1,-1,-1,-1,-1,-1,-1,-1 };
     int voiceVariant[MAX_VOICES] = {};
     unsigned long long voiceAge[MAX_VOICES] = {};

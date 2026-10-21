@@ -88,6 +88,16 @@ private:
         std::atomic<float>* zeno;
         std::atomic<float>* entangle;
         std::atomic<float>* squeeze;
+        std::atomic<float>* gpSat;
+        std::atomic<float>* wkbFilter;
+        std::atomic<float>* qPhaser;
+        std::atomic<float>* phaseAccum;
+        std::atomic<float>* interfere;
+        std::atomic<float>* labType;
+        std::atomic<float>* labAmt;
+        std::atomic<float>* labChar;
+        std::atomic<float>* labSize;
+        std::atomic<float>* labMix;
     };
 
     ParamCache makeParamCache() const;

@@ -17,7 +17,7 @@ public:
     void resized() override;
 
 private:
-    enum class Group { Wave, Potential, Env, Filter, Fx, Harmony };
+    enum class Group { Wave, Potential, Env, Filter, Fx, Harmony, Lab };
     static juce::Colour accentFor (Group);
 
     struct Knob
@@ -44,7 +44,7 @@ private:
     float uiScale = 1.0f;
     int originX = 0, originY = 0;
 
-    static constexpr int baseW = 1280, baseH = 920;
+    static constexpr int baseW = 1280, baseH = 1142;
 
     juce::Label title, versionLabel, status;
     LogoMark logo;
@@ -55,10 +55,11 @@ private:
 
     juce::TextButton waveTypeChip, potentialTypeChip;
     juce::ToggleButton showFFT, applyQm, chordChip, tunnelChip, superposeChip, walkChip, limiterChip, eprChip;
-    juce::ComboBox sampleMode, fxType, fxSolo, chordType;
+    juce::ComboBox sampleMode, fxType, fxSolo, chordType, labType, labSym;
 
     std::vector<Knob> knobs;
     std::vector<ValueSlider*> fxKnobs;
+    std::vector<ValueSlider*> labKnobs;   // master lab row, dimmed when the lab is off
     juce::Slider* pitchKnob = nullptr;
 
     // Cached message-thread accessors: the 20 Hz timer no longer walks the
@@ -68,7 +69,7 @@ private:
     juce::RangedAudioParameter* waveTypeParam = nullptr;
     juce::RangedAudioParameter* potTypeParam = nullptr;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> sampleModeAtt, fxTypeAtt,
-        fxSoloAtt, chordTypeAtt, uiSkinAtt;
+        fxSoloAtt, chordTypeAtt, uiSkinAtt, labTypeAtt, labSymAtt;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> showFFTAtt, applyQmAtt,
         chordAtt, tunnelAtt, superposeAtt, walkAtt, limiterAtt, eprAtt;
 
@@ -76,8 +77,10 @@ private:
     // The grid is derived from the golden section: columns split 768:474 (=1.620),
     // the left column splits 520:190:118 with adsr/harmony at 1.610, and the right
     // column's hero panels (208) sit phi times above the utility panels (128).
+    // Wave 4 adds the full-width Quantum Lab band (208, matching the hero
+    // panel height) below both columns.
     static const juce::Rectangle<int> headerArea, canvasArea, adsrArea, harmonyArea,
-        waveArea, potArea, quantArea, filterArea, fxArea;
+        waveArea, potArea, quantArea, filterArea, fxArea, labArea;
 
     // Hero knobs (Wavefunction panel) cap at phi x the ~75 px utility knob.
     static constexpr int heroKnobD = 122;

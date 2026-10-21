@@ -3,9 +3,43 @@
 All notable changes to SpiralQuant are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased]
+## [0.2.0] - 2026-10-21
 
 ### Added
+- **Quantum Lab band (wave 4, from the research report)**: a full-width panel
+  under both columns with eight knobs and two selectors, implementing ten
+  quantum effects from the literature study end to end:
+  - *Evolution-level (per voice)*: **GP SAT** — Gross-Pitaevskii self-interaction
+    g|psi|^2*psi (spectral peaks self-repel, a nonlinear quantum saturation
+    ceiling); **WKB** — tunneling filter T(k)=exp(-2*kappa(k)*L) in the momentum
+    step (fast components transmit the virtual barrier, slow ones reflect);
+    **PHASER** — dispersive quantum phaser, the readout probes the wave after an
+    extra e^(-i*alpha*k^2) free propagation, sweeping quadratic-phase notches;
+    **PHASE** — global dynamical phase e^(-i*E*t/hbar) with <H> = <T>+<V>
+    measured from the evolving state, plus a Berry-phase winding on adiabatic
+    potential sweeps.
+  - *Exchange symmetry*: **BOSE / FERMI** — neighbouring voices read each
+    other's wavetables at their own scan phase (symmetrised pair states):
+    Bose adds constructively, Fermi subtracts (exchange holes).
+  - *Master lab effect* (one at a time, bit-exact when Off): **Anderson
+    Reverb** — 16-line unitary Hadamard FDN whose length disorder plays the
+    random potential (CHAR = disorder W, SIZE = T60); **Adiabatic Pitch** —
+    dual-tap grain shifter whose ratio glides on the adiabatic timescale
+    (CHAR = -12..+12 semitones, SIZE = glide time); **Born Events** — Poisson
+    gate engine whose rate follows the smoothed signal power |psi|^2
+    (CHAR = rate, SIZE = recovery); **Mode Clip** — 256-point STFT spectral
+    saturation, a projection onto the lowest modes with a magnitude ceiling
+    (CHAR = modes kept, AMT = ceiling); **Loschmidt Delay** — time-reversed
+    echo window U(-t) with a Loschmidt-fidelity envelope (SIZE = window,
+    CHAR = fidelity decay). The AMT / CHAR / SIZE / MIX knobs remap per
+    effect; the shared controls dim when the lab is off.
+- **Six new factory presets** (19-24) demoing each Quantum Lab effect.
+- **Test tooling**: `--bench-lab` benchmarks all eight voices with every
+  evolution effect engaged, once per master lab effect.
+- **New base window size 1280x1142** (the lab band matches the hero-panel
+  height of 208 px); the editor stays freely resizable and scales down to
+  compact hosts.
+
 - **Fourth UI skin "Golden"**: warm gold/bronze accents on graphite, selected as
   the new last entry of the `uiSkin` choice (existing saved 0..2 values keep
   their meaning; presets are unaffected).

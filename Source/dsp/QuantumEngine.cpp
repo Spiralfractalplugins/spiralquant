@@ -4,6 +4,7 @@ void QuantumEngine::prepare (double sampleRateHz)
 {
     sampleRate = sampleRateHz <= 0.0 ? 48000.0 : sampleRateHz;
     fx.prepare (sampleRate);
+    lab.prepare (sampleRate);
     limAttack = 1.0f - (float) std::exp (-1.0 / (0.001 * sampleRate));
     limRelease = 1.0f - (float) std::exp (-1.0 / (0.08 * sampleRate));
     limGain = 1.0f;
@@ -25,6 +26,7 @@ void QuantumEngine::prepare (double sampleRateHz)
 void QuantumEngine::reset()
 {
     fx.reset();
+    lab.reset();
     for (int i = 0; i < MAX_VOICES; ++i)
     {
         voices[i].noteOff();
@@ -99,6 +101,16 @@ float QuantumEngine::chordRatio (int type, int degree)
 void QuantumEngine::setFxParams (int type, float depth, float rate, float feedback, float mix, float bits, float entropy, int soloMode)
 {
     fx.setParams (type, depth, rate, feedback, mix, bits, entropy, soloMode);
+}
+
+void QuantumEngine::setQuantumLab (float gpSat, float wkbFilter, float qPhaser, float phaseAcc,
+                                   int symmetry, int labType, float labAmt, float labCtrl,
+                                   float labSize, float labMix)
+{
+    symmetryMode = juce::jlimit (0, 2, symmetry);
+    for (int i = 0; i < MAX_VOICES; ++i)
+        voices[i].setEvolutionFx (gpSat, wkbFilter, qPhaser, phaseAcc);
+    lab.setParams (labType, labAmt, labCtrl, labSize, labMix);
 }
 
 void QuantumEngine::handleNoteOn (int note, int velocity)
@@ -340,6 +352,22 @@ void QuantumEngine::process (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&
             float sample = 0.0f;
             for (int k = 0; k < nActive; ++k)
                 sample += active[k]->process (nullptr);
+
+            // Bose/Fermi exchange: every voice gains an interference term
+            // reading its ring partner's wavetable at its own scan phase —
+            // the symmetrised pair state of the report's section 1. Bose (+)
+            // adds constructively, Fermi (-) subtracts (exchange holes).
+            if (symmetryMode != 0 && nActive > 1)
+            {
+                const float sgn = symmetryMode == 1 ? 0.3f : -0.3f;
+                for (int k = 0; k < nActive; ++k)
+                {
+                    const int p = (k + 1 < nActive) ? k + 1 : 0;
+                    sample += sgn * active[k]->envLevel()
+                              * active[p]->readTableAt (active[k]->oscPhase());
+                }
+            }
+
             ch0[i] = sample;
         }
 
@@ -388,6 +416,7 @@ void QuantumEngine::process (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&
     {
         fx.setReferenceHz (tonicHz());
         fx.process (buffer);
+        lab.process (buffer);   // Quantum Lab: after MasterFx, before the limiter
     }
 
     if (running && limiterOn)

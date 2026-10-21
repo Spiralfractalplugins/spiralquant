@@ -91,6 +91,17 @@ void QuantumVoice::setParams (float a, float d, float s, float r,
     osc.setSqueeze (squeeze);
 }
 
+void QuantumVoice::setEvolutionFx (float gp, float wkb, float disp, float phaseAcc)
+{
+    if (lastKnown && gp == lastGp && wkb == lastWkb && disp == lastDisp && phaseAcc == lastPhaseAcc)
+        return;
+    lastGp = gp; lastWkb = wkb; lastDisp = disp; lastPhaseAcc = phaseAcc;
+    osc.setGpSaturation (gp);
+    osc.setWkbFilter (wkb);
+    osc.setQPhaser (disp);
+    osc.setPhaseAccum (phaseAcc);
+}
+
 void QuantumVoice::prepareBlock()
 {
     osc.beginBlock();  // reset the per-block evolution-step budget
