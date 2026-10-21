@@ -19,6 +19,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       pkg-config \
       libasound2-dev \
       libjack-jackd2-dev \
+      libcurl4-openssl-dev \
       libdbus-1-dev \
       libfreetype-dev \
       libfontconfig-dev \

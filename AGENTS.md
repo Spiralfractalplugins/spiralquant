@@ -4,7 +4,7 @@ Guidance for coding agents working in this repository.
 
 ## Overview
 
-SpiralQuant is a JUCE 7-based audio plug-in (VST3/AU/Standalone, C++17).
+SpiralQuant is a JUCE 8-based audio plug-in (VST3/AU/CLAP/Standalone, C++17).
 The core DSP is a real-time Schrödinger-equation wavetable synthesizer.
 The project has no commits yet; treat the working tree as the source of truth.
 
@@ -19,9 +19,21 @@ The project has no commits yet; treat the working tree as the source of truth.
   ADSR editor, preset browser.
 - `tests/TestRender.cpp` — golden render/state test.
 - `vendor/JUCE/` — **vendored dependency; never edit.**
+- `vendor/clap-juce-extensions/` — fork dsp56300, pinned to SHA
+  `e1f67893cc409a40c1154fa2e78c97046da24ce0`; **vendored dependency; never edit.**
+  Provides the `SpiralQuant_CLAP` target (CLAP_ID `com.spiralquant.plugin`).
 - `presets/` — JSON presets embedded at build time.
 
 ## Commands
+
+Fetch the vendored dependencies once (both are gitignored):
+
+```sh
+git clone --depth 1 --branch 8.0.14 https://github.com/juce-framework/JUCE.git vendor/JUCE
+git clone https://github.com/dsp56300/clap-juce-extensions.git vendor/clap-juce-extensions
+git -C vendor/clap-juce-extensions checkout e1f67893cc409a40c1154fa2e78c97046da24ce0
+git -C vendor/clap-juce-extensions submodule update --init --recursive
+```
 
 Configure (macOS universal by default):
 
@@ -33,6 +45,13 @@ Build plug-in:
 
 ```sh
 cmake --build build --config Release --parallel
+```
+
+CLAP only (artefact at `build/SpiralQuant_artefacts/<CFG>/CLAP/SpiralQuant.clap`,
+auto-copied to `~/Library/Audio/Plug-Ins/CLAP/` on macOS, `~/.clap/` on Linux):
+
+```sh
+cmake --build build --target SpiralQuant_CLAP --config Release --parallel
 ```
 
 Build and run tests:
@@ -65,6 +84,9 @@ Expected test output ends with `ALL TESTS PASSED`.
 - UI colours come from `Source/gui/Palette.h` (`Skins::current()`); skins are
   Dark / SciFi Neon / Console, selected by the UI-only `uiSkin` APVTS param.
   `PluginEditor` lays out a fixed 1280×920 base grid scaled by `uiScale`.
+- CLAP reuses the same `AudioProcessor` shared code as VST3/AU; the host
+  transfers state and presets through the standard `setStateInformation`, so
+  no CLAP-specific code lives in `Source/`.
 
 ## Coding conventions
 
@@ -89,6 +111,8 @@ Expected test output ends with `ALL TESTS PASSED`.
 ## Known pitfalls
 
 - `vendor/JUCE/` is huge; search within project Source instead.
+- Configuring requires `vendor/clap-juce-extensions` on disk (CMake guard),
+  even when only building VST3/AU.
 
 ## Safety checks
 

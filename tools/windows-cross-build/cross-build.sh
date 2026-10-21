@@ -17,9 +17,12 @@ CONTAINER=${CONTAINER:-spiralquant-msvc}
 WORK_VOLUME=${WORK_VOLUME:-spiralquant-msvc-work}
 TARGETS=${*:-windows linux}
 
-if [ ! -d "$REPO/vendor/JUCE/modules" ]; then
-    echo "JUCE is missing - run:" >&2
+if [ ! -d "$REPO/vendor/JUCE/modules" ] || [ ! -d "$REPO/vendor/clap-juce-extensions/clap-libs/clap" ]; then
+    echo "Vendored dependencies are missing - run:" >&2
     echo "  git clone --depth 1 --branch 8.0.14 https://github.com/juce-framework/JUCE.git vendor/JUCE" >&2
+    echo "  git clone https://github.com/dsp56300/clap-juce-extensions.git vendor/clap-juce-extensions" >&2
+    echo "  git -C vendor/clap-juce-extensions checkout e1f67893cc409a40c1154fa2e78c97046da24ce0" >&2
+    echo "  git -C vendor/clap-juce-extensions submodule update --init --recursive" >&2
     exit 1
 fi
 
@@ -51,5 +54,5 @@ for target in $TARGETS; do
     docker cp "$CONTAINER:/work/out/$target/." "$REPO/build/$target/"
 done
 
-find "$REPO/build" -maxdepth 4 \( -name 'SpiralQuant.vst3' -o -name 'SpiralQuant*.exe' \
-    -o -name 'SpiralQuant_Standalone' -o -name 'SpiralQuantTests' \)
+find "$REPO/build" -maxdepth 4 \( -name 'SpiralQuant.vst3' -o -name 'SpiralQuant.clap' \
+    -o -name 'SpiralQuant*.exe' -o -name 'SpiralQuant_Standalone' -o -name 'SpiralQuantTests' \)

@@ -4,7 +4,7 @@ if (APPLE AND NOT CMAKE_OSX_ARCHITECTURES)
     set (CMAKE_OSX_ARCHITECTURES "arm64;x86_64" CACHE STRING "macOS architectures to build" FORCE)
 endif()
 
-project(SpiralQuant VERSION 0.1.1 LANGUAGES C CXX)
+project(SpiralQuant VERSION 0.1.2 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -13,7 +13,22 @@ if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/vendor/JUCE/CMakeLists.txt")
     message(FATAL_ERROR "JUCE not found in vendor/JUCE.")
 endif()
 
+# A host dlopens the CLAP wrapper, so the source has to be on disk before configure. Pinned to
+# the fork SHA below; the clap/clap-helpers headers come from its own submodules.
+if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/vendor/clap-juce-extensions/CMakeLists.txt")
+    message(FATAL_ERROR
+        "clap-juce-extensions not found in vendor/clap-juce-extensions.\n"
+        "Fetch it once with:\n"
+        "  git clone https://github.com/dsp56300/clap-juce-extensions.git vendor/clap-juce-extensions\n"
+        "  git -C vendor/clap-juce-extensions checkout e1f67893cc409a40c1154fa2e78c97046da24ce0\n"
+        "  git -C vendor/clap-juce-extensions submodule update --init --recursive")
+endif()
+
 add_subdirectory(vendor/JUCE)
+
+# CLAP format support on top of JUCE. Adds the SpiralQuant_CLAP target, which builds
+# a .clap alongside the VST3/AU/Standalone artefacts.
+add_subdirectory(vendor/clap-juce-extensions EXCLUDE_FROM_ALL)
 
 file(GLOB SQ_PRESET_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/presets/*.sp303preset")
 juce_add_binary_data(SpiralQuantPresets SOURCES ${SQ_PRESET_SOURCES})
@@ -80,6 +95,15 @@ if (MSVC)
 endif()
 
 juce_generate_juce_header(SpiralQuant)
+
+# CLAP: same shared code as VST3/AU, wrapped by clap-juce-extensions. CLAP_ID matches BUNDLE_ID,
+# features come from https://github.com/free-audio/clap/blob/main/include/clap/plugin-features.h.
+clap_juce_extensions_plugin(TARGET SpiralQuant
+    CLAP_ID "com.spiralquant.plugin"
+    CLAP_FEATURES instrument synth polyphonic bass lead pad "wavetable synthesis"
+    CLAP_MANUAL_URL "https://github.com/Spiralfractalplugins/spiralquant"
+    CLAP_SUPPORT_URL "https://github.com/Spiralfractalplugins/spiralquant"
+)
 
 juce_add_console_app(SpiralQuantTests)
 target_sources(SpiralQuantTests PRIVATE

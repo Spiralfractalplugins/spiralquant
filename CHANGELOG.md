@@ -5,9 +5,31 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-10-21
+
+The plug-in shipped as VST3 / AU / Standalone; CLAP hosts (Bitwig, Reaper,
+Falcon, Ardour, LMMS, …) had nothing to load. Now they do — same DSP, same
+parameters, same presets.
+
 ### Added
+- **CLAP format** via [clap-juce-extensions](https://github.com/dsp56300/clap-juce-extensions)
+  (fork dsp56300, pinned to `e1f6789` by the CMake guard), mirroring the Spiral303
+  setup: the same shared code as VST3/AU, parameters still driven by
+  `AudioProcessorValueTreeState`, state transferred through the standard
+  `setStateInformation`, so presets open in a CLAP host as they do in VST3.
+  `CLAP_ID = com.spiralquant.plugin` (matches `BUNDLE_ID`), features
+  `instrument synth polyphonic bass lead pad "wavetable synthesis"`. New target
+  `SpiralQuant_CLAP` emits `CLAP/SpiralQuant.clap` next to the other artefacts and
+  auto-copies to `~/Library/Audio/Plug-Ins/CLAP/` on macOS and `~/.clap/` on Linux
+  (manual copy to `C:\Program Files\Common Files\CLAP` on Windows). Vendored into
+  `vendor/clap-juce-extensions` — outside git like JUCE, with a CMake guard and the
+  fetch commands in `docs/BUILDING.md`. No DSP code changed, not one sample.
+- CLAP rides into the releases: `scripts/make_dist.sh` bundles the bundle into the
+  macOS and Linux archives and `INSTALL.txt` gained the CLAP install line; the
+  container Linux target builds `SpiralQuant_CLAP` (needs `libcurl4-openssl-dev`,
+  now in the image), the Windows cross-build still stops at VST3 + Standalone.
 - Cross-build tooling: `tools/windows-cross-build/cross-build.sh` compiles the
-  Windows VST3 + Standalone with MSVC under Wine and a native Linux build in one
+  Windows VST3 + Standalone with MSVC under Wine and the native Linux build in one
   amd64 Docker/OrbStack container (no matching machine needed), then runs the
   render test suite on the produced PE binary as a smoke test; `docs/BUILDING.md`
   covers the container, native Windows/Linux instructions and the JUCE

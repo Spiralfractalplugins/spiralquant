@@ -55,23 +55,32 @@ case "$PLATFORM" in
     macos)
         AU="$(find_artefact 'SpiralQuant.component')"
         SA="$(find_artefact 'SpiralQuant.app')"
+        CLAP="$(find_artefact 'SpiralQuant.clap')"
         [ -n "$AU" ] && cp -R "$AU" "$OUT/"
         [ -n "$SA" ] && cp -R "$SA" "$OUT/"
+        [ -n "$CLAP" ] && cp -R "$CLAP" "$OUT/"
         INSTALL_LINES="VST3:       copy SpiralQuant.vst3 to ~/Library/Audio/Plug-Ins/VST3
 AU:         copy SpiralQuant.component to ~/Library/Audio/Plug-Ins/Components
+CLAP:       copy SpiralQuant.clap to ~/Library/Audio/Plug-Ins/CLAP
 Standalone: open SpiralQuant.app"
         ;;
     windows)
         SA="$(find_artefact 'SpiralQuant.exe')"
+        CLAP="$(find_artefact 'SpiralQuant.clap')"
         [ -n "$SA" ] && cp "$SA" "$OUT/"
+        [ -n "$CLAP" ] && cp -R "$CLAP" "$OUT/"
         INSTALL_LINES="VST3:       copy SpiralQuant.vst3 to C:\\Program Files\\Common Files\\VST3
+CLAP:       copy SpiralQuant.clap to C:\\Program Files\\Common Files\\CLAP
 Standalone: run SpiralQuant.exe"
         ;;
     linux)
         SA="$(find_artefact 'SpiralQuant_Standalone' || true)"
         [ -z "$SA" ] && SA="$(find_artefact 'SpiralQuant' | grep -i standalone || true)"
+        CLAP="$(find_artefact 'SpiralQuant.clap')"
         [ -n "$SA" ] && cp "$SA" "$OUT/SpiralQuant_Standalone"
+        [ -n "$CLAP" ] && cp -R "$CLAP" "$OUT/"
         INSTALL_LINES="VST3:       copy SpiralQuant.vst3 to ~/.vst3
+CLAP:       copy SpiralQuant.clap to ~/.clap
 Standalone: run ./SpiralQuant_Standalone"
         ;;
 esac

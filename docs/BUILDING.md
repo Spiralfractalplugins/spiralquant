@@ -10,9 +10,17 @@
 git clone --depth 1 --branch 8.0.14 https://github.com/juce-framework/JUCE.git vendor/JUCE
 ```
 
+- clap-juce-extensions в `vendor/clap-juce-extensions` (нужен для формата CLAP):
+
+```bash
+git clone https://github.com/dsp56300/clap-juce-extensions.git vendor/clap-juce-extensions
+git -C vendor/clap-juce-extensions checkout e1f67893cc409a40c1154fa2e78c97046da24ce0
+git -C vendor/clap-juce-extensions submodule update --init --recursive
+```
+
 В JUCE 8 цель `SpiralQuant` — только общий код; форматы собираются отдельными целями
-`SpiralQuant_VST3`, `SpiralQuant_Standalone`, плюс `SpiralQuantTests` (оффлайн-рендер,
-аудио устройство не нужно).
+`SpiralQuant_VST3`, `SpiralQuant_Standalone`, `SpiralQuant_CLAP` (на macOS ещё
+`SpiralQuant_AU`), плюс `SpiralQuantTests` (оффлайн-рендер, аудио устройство не нужно).
 
 ## macOS (нативно)
 
@@ -22,15 +30,17 @@ cmake --build build-release --config Release --parallel
 ```
 
 Собирается universal (`arm64;x86_64`), плагины копируются рядом с артефактами
-(`JUCE_COPY_PLUGIN_AFTER_BUILD`). Артефакты — в
+(`JUCE_COPY_PLUGIN_AFTER_BUILD`) и дополнительно в системные папки плагинов
+(VST3/AU — `~/Library/Audio/Plug-Ins/{VST3,Components}`, CLAP —
+`~/Library/Audio/Plug-Ins/CLAP/`). Артефакты — в
 `build-release/SpiralQuant_artefacts/Release/`: `VST3/SpiralQuant.vst3`,
-`AU/SpiralQuant.component`, `Standalone/SpiralQuant.app`.
+`AU/SpiralQuant.component`, `CLAP/SpiralQuant.clap`, `Standalone/SpiralQuant.app`.
 
 ## Windows и Linux с машины macOS/Linux (контейнер, без Windows)
 
 `tools/windows-cross-build/cross-build.sh` собирает Windows VST3 через MSVC под
 Wine ([image msvc-wine](https://github.com/mstorsjo/msvc-wine)) и нативный Linux
-в одном amd64-контейнере Docker/OrbStack:
+(VST3 + CLAP + Standalone) в одном amd64-контейнере Docker/OrbStack:
 
 ```bash
 ./tools/windows-cross-build/cross-build.sh          # обе платформы
@@ -39,11 +49,16 @@ Wine ([image msvc-wine](https://github.com/mstorsjo/msvc-wine)) и нативн�
 ```
 
 Результат копируется в `build/windows/` и `build/linux/` (каталог `build/` в
-`.gitignore`). Образ `spiralquant-msvc:1`, контейнер `spiralquant-msvc` и volume
+`.gitignore`). CLAP в контейнерной сборке есть только для Linux — Windows-цель
+собирает VST3/Standalone/тесты, `.clap` для Windows делается нативной сборкой в
+Visual Studio. Образ `spiralquant-msvc:1`, контейнер `spiralquant-msvc` и volume
 `spiralquant-msvc-work` остаются между запусками; первая сборка на Apple Silicon
 идёт через Rosetta и скачивает MSVC + Windows SDK (лицензия принимается
-явно в `Dockerfile`: `vsdownload.py --accept-license`). Пересобрать контейнер
-с нуля: `docker rm -f spiralquant-msvc && docker volume rm spiralquant-msvc-work`
+явно в `Dockerfile`: `vsdownload.py --accept-license`). Если образ был собран
+до появления `libcurl4-openssl-dev` (нужен для CLAP-обёртки), пересоберите его:
+`REBUILD=1 ./tools/windows-cross-build/cross-build.sh linux` (слой MSVC
+скачается заново). Пересобрать контейнер с нуля:
+`docker rm -f spiralquant-msvc && docker volume rm spiralquant-msvc-work`
 (нужно, если репозиторий переехал в другую папку — привязка `/src` фиксируется
 при создании контейнера).
 
@@ -87,6 +102,8 @@ cmake --build build --config Release --parallel
 Результат:
 - `build\SpiralQuant_artefacts\Release\VST3\SpiralQuant.vst3` — скопируйте в
   `C:\Program Files\Common Files\VST3` (или укажите папку хосту).
+- `build\SpiralQuant_artefacts\Release\CLAP\SpiralQuant.clap` — скопируйте в
+  `C:\Program Files\Common Files\CLAP` (auto-copy для CLAP на Windows нет).
 - `build\SpiralQuant_artefacts\Release\Standalone\SpiralQuant.exe` — проверка
   звуком без хоста.
 - Тесты: `cmake --build build --config Release --target SpiralQuantTests`, затем
@@ -96,13 +113,13 @@ cmake --build build --config Release --parallel
 
 ```bash
 sudo apt install build-essential cmake ninja-build pkg-config \
-  libasound2-dev libjack-jackd2-dev libdbus-1-dev libfreetype-dev \
+  libasound2-dev libjack-jackd2-dev libcurl4-openssl-dev libdbus-1-dev libfreetype-dev \
   libfontconfig-dev libx11-dev libxcomposite-dev libxcursor-dev libxdamage-dev \
   libxext-dev libxfixes-dev libxi-dev libxinerama-dev libxrandr-dev libxss-dev \
   mesa-common-dev
 
 cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
-cmake --build build -j --target SpiralQuant_VST3 SpiralQuant_Standalone SpiralQuantTests
+cmake --build build -j --target SpiralQuant_VST3 SpiralQuant_Standalone SpiralQuant_CLAP SpiralQuantTests
 build/SpiralQuantTests_artefacts/Release/SpiralQuantTests
 ```
 
@@ -110,13 +127,21 @@ build/SpiralQuantTests_artefacts/Release/SpiralQuantTests
 - `build/SpiralQuant_artefacts/Release/VST3/SpiralQuant.vst3/Contents/x86_64-linux/SpiralQuant.so`
   — в `~/.vst3/` или `/usr/local/lib/vst3/`.
 - `build/SpiralQuant_artefacts/Release/Standalone/SpiralQuant`.
+- `build/SpiralQuant_artefacts/Release/CLAP/SpiralQuant.clap` — в `~/.clap/`
+  (auto-copy после сборки).
 
 Для релиза бинарники стоит урезать (`strip SpiralQuant.so SpiralQuant`).
 
 ## Примечания
 - Формат **Audio Unit существует только на macOS/iOS** — под Windows и Linux сборка
-  ограничена VST3 (и Standalone). Это ограничение платформы, а не проекта: JUCE
+  ограничена VST3, CLAP (и Standalone). Это ограничение платформы, а не проекта: JUCE
   автоматически пропускает AU на других целевых платформах.
+- **CLAP** собирается через [clap-juce-extensions](https://github.com/dsp56300/clap-juce-extensions)
+  (форк dsp56300, пин по SHA в guard'е `CMakeLists.txt`): тот же общий код, что у VST3/AU,
+  состояние и пресеты переносятся хостом через стандартный `setStateInformation`.
+  Цель `SpiralQuant_CLAP` кладёт `SpiralQuant.clap` рядом с остальными артефактами;
+  на macOS и Linux есть auto-copy в системную папку, на Windows — вручную.
+  Из контейнерных скриптов CLAP собирается только в Linux-цели.
 - Для x86 (32 бита) вместо `-A x64` используйте `-A Win32`, но современные хосты
   требуют x64.
 - Бинарники из контейнера не подписаны; перед распространением Windows-сборку

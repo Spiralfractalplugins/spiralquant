@@ -8,7 +8,7 @@
 
 [![Release](https://img.shields.io/github/v/release/Spiralfractalplugins/spiralquant?style=flat-square&label=release&color=00d9ff)](https://github.com/Spiralfractalplugins/spiralquant/releases/latest)
 [![Platforms](https://img.shields.io/badge/platforms-macOS%20·%20Windows%20·%20Linux-111111?style=flat-square)](#downloads)
-[![Formats](https://img.shields.io/badge/VST3%20·%20AU%20·%20Standalone-6a5acd?style=flat-square)](#formats)
+[![Formats](https://img.shields.io/badge/VST3%20·%20AU%20·%20CLAP%20·%20Standalone-6a5acd?style=flat-square)](#formats)
 [![License](https://img.shields.io/badge/license-GPL--3.0-2ea44f?style=flat-square)](LICENSE)
 [![JUCE](https://img.shields.io/badge/built%20with-JUCE%208-orange?style=flat-square)](https://juce.com/)
 
@@ -35,9 +35,14 @@ Grab the prebuilt bundles from the
 
 | Package | Contents |
 | ------- | -------- |
-| `SpiralQuant-v0.1.1-macos-universal.zip` | VST3 + AU + Standalone (Apple Silicon & Intel) |
-| `SpiralQuant-v0.1.1-windows-x64.zip` | VST3 + Standalone |
-| `SpiralQuant-v0.1.1-linux-x86_64.zip` | VST3 + Standalone |
+| `SpiralQuant-v<version>-macos-universal.zip` | VST3 + AU + CLAP + Standalone (Apple Silicon & Intel) |
+| `SpiralQuant-v<version>-windows-x64.zip` | VST3 + Standalone |
+| `SpiralQuant-v<version>-linux-x86_64.zip` | VST3 + CLAP + Standalone |
+
+CLAP arrived in 0.1.2 — the published 0.1.1 archives hold VST3/AU/Standalone only.
+The Windows archive still has no `.clap`: the container cross-build stops at VST3,
+so build the Windows CLAP natively in Visual Studio (see
+[BUILDING](docs/BUILDING.md)).
 
 Each archive carries its own `INSTALL.txt`; see [BUILDING](docs/BUILDING.md)
 to compile from source.
@@ -46,6 +51,8 @@ to compile from source.
 
 - **VST3** — macOS, Windows, Linux
 - **AU** — macOS
+- **CLAP** — macOS, Windows, Linux (built from source and bundled in the release
+  zips via [clap-juce-extensions](https://github.com/dsp56300/clap-juce-extensions))
 - **Standalone** application — all three platforms
 
 ## Highlights
@@ -102,22 +109,28 @@ to compile from source.
 
 ## Quick start (from source)
 
-Requirements: CMake 3.24+, a C++17 compiler, and JUCE 8.0.14 (fetched into
-`vendor/JUCE/`, which is not committed):
+Requirements: CMake 3.24+, a C++17 compiler, JUCE 8.0.14 and clap-juce-extensions
+(both fetched into `vendor/`, which is not committed):
 
 ```sh
 git clone --depth 1 --branch 8.0.14 https://github.com/juce-framework/JUCE.git vendor/JUCE
+git clone https://github.com/dsp56300/clap-juce-extensions.git vendor/clap-juce-extensions
+git -C vendor/clap-juce-extensions checkout e1f67893cc409a40c1154fa2e78c97046da24ce0
+git -C vendor/clap-juce-extensions submodule update --init --recursive
 
 cmake -S . -B build
 cmake --build build --config Release --parallel
 ```
 
 On macOS the project builds a universal binary (`arm64;x86_64`) by default and
-copies built plug-ins next to the artefacts (`JUCE_COPY_PLUGIN_AFTER_BUILD`).
+copies built plug-ins next to the artefacts and into the system plug-in folders
+(`JUCE_COPY_PLUGIN_AFTER_BUILD`; CLAP lands in `~/Library/Audio/Plug-Ins/CLAP/`).
+The `SpiralQuant_CLAP` target wraps the same shared code through
+clap-juce-extensions (`CLAP_ID = com.spiralquant.plugin`).
 
 Windows and Linux builds need no matching machine —
 `tools/windows-cross-build/cross-build.sh` compiles the Windows VST3 with MSVC
-under Wine and the Linux one natively, both in an amd64 Docker/OrbStack
+under Wine and the Linux VST3 + CLAP natively, both in an amd64 Docker/OrbStack
 container, and finishes by running the render test suite on the produced PE
 binary:
 
@@ -369,6 +382,7 @@ opt-in because the DSP relies on `isfinite` guards for NaN rejection.
 
 - `build/SpiralQuant_artefacts/Release/VST3/SpiralQuant.vst3`
 - `build/SpiralQuant_artefacts/Release/AU/SpiralQuant.component`
+- `build/SpiralQuant_artefacts/Release/CLAP/SpiralQuant.clap`
 - `build/SpiralQuant_artefacts/Release/Standalone/SpiralQuant.app`
 
 The container cross-build copies its results to `build/windows/`
@@ -416,9 +430,10 @@ Source/
   gui/                   palette/skins, scope canvas, ADSR editor, look-and-feel
 tests/TestRender.cpp
 vendor/JUCE/            JUCE 8.0.14 (cloned in, not committed)
+vendor/clap-juce-extensions/  CLAP wrapper for JUCE, fork dsp56300 pinned by SHA (cloned in, not committed)
 docs/                   manuals (EN/RU), announcements, HOW_IT_WORKS, BUILDING, screenshots, marketing cards
 tools/windows-cross-build/  Docker/OrbStack cross-build for Windows (MSVC+Wine) and Linux
-scripts/make_dist.sh    bundles VST3/AU/Standalone + docs into dist/ + zip
+scripts/make_dist.sh    bundles VST3/AU/CLAP/Standalone + docs into dist/ + zip
 dist/                   generated release distributions (gitignored except README)
 ```
 
